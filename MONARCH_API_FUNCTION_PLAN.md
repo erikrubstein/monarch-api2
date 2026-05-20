@@ -54,19 +54,13 @@ Accounts owns account records, balances, institutions, sync status, net worth, a
 
 - `list_accounts(filter: AccountFilter | None = None) -> list[Account]`
 - `get_account(account_id: AccountId) -> Account`
-- `get_account_type_options() -> list[AccountTypeOption]`
-- `list_institutions() -> list[Institution]`
-- `get_net_worth(date_range: DateRange | None = None, interval: TimeInterval = "month") -> NetWorthSummary`
-- `get_account_balances(account_ids: list[AccountId] | None = None) -> list[AccountBalance]`
-- `get_account_history(account_id: AccountId, date_range: DateRange | None = None, interval: TimeInterval = "day") -> list[AccountHistoryPoint]`
-- `get_account_snapshots(filter: AccountSnapshotFilter) -> AccountSnapshotSeries`
-- `create_manual_account(input: ManualAccountCreate) -> Account`
-- `update_account(account_id: AccountId, patch: AccountPatch) -> Account`
-- `update_manual_account_balance(account_id: AccountId, balance: MoneyAmount, as_of: Date | None = None) -> Account`
-- `delete_account(account_id: AccountId) -> None`
-- `refresh_accounts(account_ids: list[AccountId] | None = None) -> AccountRefreshJob`
-- `get_account_refresh_status(job_id: str | None = None, account_ids: list[AccountId] | None = None) -> AccountRefreshStatus`
-- `wait_for_account_refresh(account_ids: list[AccountId] | None = None, timeout_seconds: int = 300) -> AccountRefreshStatus`
+- `get_account_history(account_id: AccountId) -> list[AccountHistoryPoint]`
+- `get_net_worth_performance(start_date: Date | None = None, end_date: Date | None = None, account_filter: AccountFilter | None = None) -> list[NetWorthSnapshot]`
+- `get_net_worth_breakdown(start_date: Date, timeframe: str, filters: AccountFilter | None = None) -> list[NetWorthBreakdownPoint]`
+- `get_historical_balances(balance_date: Date, filters: AccountFilter | None = None) -> list[AccountBalance]`
+- `create_manual_account(name: str, type: str, subtype: str, balance: MoneyAmount | None = None, include_in_net_worth: bool = True, owner_user_id: UserId | None = None) -> AccountId`
+- `update_account(account_id: AccountId, *, name: str | None = None, type: str | None = None, subtype: str | None = None, balance: MoneyAmount | None = None, include_in_net_worth: bool | None = None, hide_from_list: bool | None = None, hide_transactions_from_reports: bool | None = None, owner_user_id: UserId | None = None, deactivated_at: Date | str | None = None) -> Account`
+- `delete_account(account_id: AccountId) -> bool`
 
 #### Deferred Or Limited Functions
 
@@ -416,6 +410,12 @@ class FileUpload:
     content_type: str
     bytes: bytes
 
+class User:
+    id: UserId
+    display_name: str | None
+    profile_picture_url: str | None
+    raw: JsonDict | None
+
 class FieldError:
     field: str | None
     messages: list[str]
@@ -439,132 +439,74 @@ ReviewStatus = Literal["needs_review", "reviewed", "not_reviewed"]
 ### Accounts Types
 
 ```python
+class AccountType:
+    name: str | None
+    display_name: str | None
+    group: str | None
+
 class Institution:
-    id: InstitutionId
-    name: str
-    logo_url: str | None
+    id: InstitutionId | None
+    name: str | None
+    logo: str | None
     primary_color: str | None
-    provider: str | None
-    status: Literal["healthy", "degraded", "disconnected", "unknown"] | None
-
-class AccountTypeOption:
-    type: str
-    display_name: str
-    subtypes: list[AccountSubtypeOption]
-
-class AccountSubtypeOption:
-    subtype: str
-    display_name: str
+    raw: JsonDict | None
 
 class Account:
     id: AccountId
     display_name: str
+    balance: MoneyAmount | None
+    current_balance: MoneyAmount | None
+    last_updated_at: DateTime | None
+    type: AccountType | None
+    subtype: AccountType | None
     institution: Institution | None
-    type: str
-    subtype: str | None
-    current_balance: MoneyAmount
-    available_balance: MoneyAmount | None
-    credit_limit: MoneyAmount | None
-    currency: str | None
-    is_manual: bool
-    is_active: bool
-    is_hidden: bool
-    include_in_net_worth: bool
-    hide_transactions_from_reports: bool
-    hide_from_summary_list: bool
-    last_synced_at: DateTime | None
-    created_at: DateTime | None
-    updated_at: DateTime | None
+    owner: User | None
+    is_asset: bool | None
+    is_manual: bool | None
+    is_hidden: bool | None
+    sync_disabled: bool | None
+    include_in_net_worth: bool | None
+    logo_url: str | None
+    icon: str | None
+    raw: JsonDict | None
 
 class AccountFilter:
-    account_ids: list[AccountId] | None
-    types: list[str] | None
-    subtypes: list[str] | None
-    institution_ids: list[InstitutionId] | None
-    include_hidden: bool = False
-    include_inactive: bool = False
-    manual_only: bool | None = None
-
-class AccountSnapshotFilter:
-    date_range: DateRange
-    account_ids: list[AccountId] | None
-    account_types: list[str] | None
-    interval: TimeInterval = "month"
-
-class AccountSnapshotSeries:
-    date_range: DateRange
-    interval: TimeInterval
-    points: list[AccountSnapshotPoint]
-
-class AccountSnapshotPoint:
-    date: Date
-    account_id: AccountId | None
+    ids: list[AccountId] | None
     account_type: str | None
-    balance: MoneyAmount
-
-class AccountPatch:
-    display_name: str | None
-    type: str | None
-    subtype: str | None
-    include_in_net_worth: bool | None
-    hide_transactions_from_reports: bool | None
-    hide_from_summary_list: bool | None
-    is_hidden: bool | None
-
-class ManualAccountCreate:
-    display_name: str
-    type: str
-    subtype: str | None
-    balance: MoneyAmount
-    include_in_net_worth: bool = True
-    currency: str | None = None
+    account_types: list[str] | None
+    account_subtype: str | None
+    account_subtypes: list[str] | None
+    groups: list[str] | None
+    include_hidden: bool | None
+    include_deleted: bool | None
 
 class AccountBalance:
     account_id: AccountId
-    balance: MoneyAmount
-    date: Date
+    balance: MoneyAmount | None
+    include_in_net_worth: bool | None
+    account_type: str | None
+    raw: JsonDict | None
 
 class AccountHistoryPoint:
     account_id: AccountId
     date: Date
-    balance: MoneyAmount
+    balance: MoneyAmount | None
+    raw: JsonDict | None
 
-class NetWorthSummary:
-    current_net_worth: MoneyAmount
-    change_amount: MoneyAmount
-    change_percent: Decimal | None
-    assets: MoneyAmount
-    liabilities: MoneyAmount
-    series: list[NetWorthPoint]
-
-class NetWorthPoint:
+class NetWorthBreakdownPoint:
+    account_type: str
     date: Date
-    assets: MoneyAmount
-    liabilities: MoneyAmount
-    net_worth: MoneyAmount
+    balance: MoneyAmount | None
+    account_group: str | None
+    raw: JsonDict | None
 
-class AccountRefreshJob:
-    id: str | None
-    account_ids: list[AccountId]
-    requested_at: DateTime
+class NetWorthSnapshot:
+    date: Date
+    net_worth: MoneyAmount | None
+    assets_balance: MoneyAmount | None
+    liabilities_balance: MoneyAmount | None
+    raw: JsonDict | None
 
-class AccountRefreshStatus:
-    is_complete: bool
-    account_statuses: list[AccountSyncStatus]
-
-class AccountSyncStatus:
-    account_id: AccountId
-    status: Literal["pending", "syncing", "complete", "failed", "unknown"]
-    message: str | None
-
-ConnectionProvider = Literal["plaid", "mx", "finicity", "unknown"]
-
-class AccountConnectionSession:
-    id: str
-    provider: ConnectionProvider
-    url: str | None
-    public_token: str | None
-    expires_at: DateTime | None
 ```
 
 ### Transactions Types
@@ -1464,7 +1406,7 @@ class MemberRef:
 ## Recommended Implementation Order
 
 1. Auth login/session support, MFA challenge handling, logout, current-user lookup, and password flows.
-2. Accounts read functions, account refresh, and account history.
+2. Accounts read functions, manual accounts, balances, and net worth history.
 3. Categories, Tags, and Merchants read functions.
 4. Transactions list/detail/update/split/delete with the full `TransactionFilter`.
 5. Cashflow summary and breakdown.
