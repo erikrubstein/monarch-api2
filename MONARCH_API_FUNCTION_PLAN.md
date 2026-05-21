@@ -52,10 +52,10 @@ Accounts owns account records, balances, institutions, sync status, net worth, a
 
 #### Core Functions
 
-- `list_accounts(filter: AccountFilter | None = None) -> list[Account]`
+- `list_accounts(filters: AccountFilter | None = None) -> list[Account]`
 - `get_account(account_id: AccountId) -> Account`
 - `get_account_history(account_id: AccountId) -> list[AccountHistoryPoint]`
-- `get_net_worth_performance(start_date: Date | None = None, end_date: Date | None = None, account_filter: AccountFilter | None = None) -> list[NetWorthSnapshot]`
+- `get_net_worth_performance(start_date: Date | None = None, end_date: Date | None = None, filters: AccountFilter | None = None) -> list[NetWorthSnapshot]`
 - `get_net_worth_breakdown(start_date: Date, timeframe: str, filters: AccountFilter | None = None) -> list[NetWorthBreakdownPoint]`
 - `get_historical_balances(balance_date: Date, filters: AccountFilter | None = None) -> list[AccountBalance]`
 - `create_manual_account(name: str, type: str, subtype: str, balance: MoneyAmount | None = None, include_in_net_worth: bool = True, owner_user_id: UserId | None = None) -> AccountId`
@@ -234,30 +234,32 @@ Investments owns securities, holdings, allocation, performance, benchmarks, and 
 
 ### Categories
 
-Categories owns category groups, categories, display order, names, emojis, rollover configuration defaults, and activation/deactivation.
+Categories owns category groups, categories, display order, names, emojis, and category activation/deactivation.
 
 #### Core Functions
 
-- `list_category_groups(include_inactive: bool = False) -> list[CategoryGroup]`
-- `list_categories(filter: CategoryFilter | None = None) -> list[Category]`
-- `get_category(category_id: CategoryId) -> Category`
-- `get_category_tree(include_inactive: bool = False) -> CategoryTree`
-- `create_category_group(input: CategoryGroupCreate) -> CategoryGroup`
-- `update_category_group(group_id: CategoryGroupId, patch: CategoryGroupPatch) -> CategoryGroup`
-- `delete_category_group(group_id: CategoryGroupId, reassignment_group_id: CategoryGroupId | None = None) -> None`
-- `reorder_category_groups(group_ids_in_order: list[CategoryGroupId]) -> list[CategoryGroup]`
-- `create_category(input: CategoryCreate) -> Category`
-- `update_category(category_id: CategoryId, patch: CategoryPatch) -> Category`
-- `move_category(category_id: CategoryId, group_id: CategoryGroupId, position: int | None = None) -> Category`
-- `reorder_categories(group_id: CategoryGroupId, category_ids_in_order: list[CategoryId]) -> list[Category]`
-- `deactivate_category(category_id: CategoryId, replacement_category_id: CategoryId | None = None) -> Category`
+- `list_categories(filters: CategoryFilter | None = None, include_disabled: bool = False) -> list[Category]`
+- `list_category_groups() -> list[CategoryGroup]`
+- `get_category_catalog(include_disabled: bool = False) -> CategoryCatalog`
+- `get_category(category_id: CategoryId) -> Category | None`
+- `get_category_group(group_id: CategoryGroupId) -> CategoryGroup | None`
+- `create_category(name: str, group_id: CategoryGroupId, icon: str) -> Category`
+- `update_category(category_id: CategoryId, *, name: str | None = None, group_id: CategoryGroupId | None = None, icon: str | None = None) -> Category`
+- `remove_category(category_id: CategoryId, *, move_to_category_id: CategoryId | None = None) -> bool`
 - `reactivate_category(category_id: CategoryId) -> Category`
-- `delete_category(category_id: CategoryId, replacement_category_id: CategoryId | None = None) -> None`
-- `bulk_delete_categories(category_ids: list[CategoryId], replacement_category_id: CategoryId | None = None) -> BulkMutationResult[None]`
+- `reorder_category(category_id: CategoryId, *, group_id: CategoryGroupId, order: int) -> Category`
+- `create_category_group(name: str, type: CategoryType) -> CategoryGroup`
+- `update_category_group(group_id: CategoryGroupId, *, name: str | None = None, type: CategoryType | None = None) -> CategoryGroup`
+- `delete_category_group(group_id: CategoryGroupId, *, move_to_group_id: CategoryGroupId | None = None) -> bool`
+- `reorder_category_group(group_id: CategoryGroupId, *, order: int) -> list[CategoryGroup]`
 
 #### Boundary With Budget
 
-Category rollover eligibility and defaults can live here, but month-specific planned, actual, remaining, and rollover values belong in Budget.
+The category page exposes some budget-adjacent fields such as budget variability and budget exclusion. Those fields can be returned on `Category`, but dedicated budget planning operations belong in Budget.
+
+#### Listing Shape
+
+`list_categories()` only requests and returns categories. `list_category_groups()` only requests and returns groups. `get_category_catalog()` is the intentional combined view for category-page organization; it requests both resources and applies Monarch-style group/category ordering.
 
 ### Merchants
 
@@ -471,10 +473,8 @@ class Account:
     raw: JsonDict | None
 
 class AccountFilter:
-    ids: list[AccountId] | None
-    account_type: str | None
+    account_ids: list[AccountId] | None
     account_types: list[str] | None
-    account_subtype: str | None
     account_subtypes: list[str] | None
     groups: list[str] | None
     include_hidden: bool | None
@@ -796,7 +796,7 @@ class BudgetSummary:
     remaining_to_budget: MoneyAmount
 
 class BudgetGroupRow:
-    group: CategoryGroupRef
+    group: CategoryGroupReference
     planned: MoneyAmount
     actual: MoneyAmount
     remaining: MoneyAmount
@@ -1076,63 +1076,50 @@ class ManualHoldingPatch:
 ### Categories Types
 
 ```python
-CategoryKind = Literal["income", "expense", "transfer"]
+class CategoryType(str, Enum):
+    EXPENSE = "expense"
+    INCOME = "income"
+    TRANSFER = "transfer"
+
+class CategoryGroupReference:
+    id: CategoryGroupId
+    name: str | None
+    type: CategoryType | None
+    raw: JsonDict | None
 
 class CategoryGroup:
     id: CategoryGroupId
     name: str
-    kind: CategoryKind
-    order: int
-    is_system: bool
-    is_active: bool
-    categories: list[Category]
+    type: CategoryType | None
+    order: int | None
+    color: str | None
+    group_level_budgeting_enabled: bool | None
+    budget_variability: str | None
+    raw: JsonDict | None
 
 class Category:
     id: CategoryId
-    group_id: CategoryGroupId
     name: str
-    emoji: str | None
-    kind: CategoryKind
-    order: int
-    is_system: bool
-    is_active: bool
-    rollover_enabled: bool | None
-    created_at: DateTime | None
-    updated_at: DateTime | None
+    icon: str | None
+    order: int | None
+    group: CategoryGroupReference | None
+    type: CategoryType | None
+    system_category: str | None
+    system_category_display_name: str | None
+    is_system: bool | None
+    is_disabled: bool | None
+    is_protected: bool | None
+    exclude_from_budget: bool | None
+    budget_variability: str | None
+    raw: JsonDict | None
 
 class CategoryFilter:
     group_ids: list[CategoryGroupId] | None
-    kinds: list[CategoryKind] | None
-    search: str | None
-    include_inactive: bool = False
+    types: list[CategoryType] | None
 
-class CategoryTree:
+class CategoryCatalog:
     groups: list[CategoryGroup]
-
-class CategoryGroupCreate:
-    name: str
-    kind: CategoryKind
-    position: int | None
-
-class CategoryGroupPatch:
-    name: str | None
-    kind: CategoryKind | None
-
-class CategoryCreate:
-    group_id: CategoryGroupId
-    name: str
-    emoji: str | None
-    kind: CategoryKind
-    position: int | None
-    rollover_settings: RolloverSettings | None
-
-class CategoryPatch:
-    name: str | None
-    emoji: str | None
-    group_id: CategoryGroupId | None
-    kind: CategoryKind | None
-    rollover_settings: RolloverSettings | None
-    is_active: bool | None
+    categories: list[Category]
 ```
 
 ### Merchants Types
@@ -1378,14 +1365,14 @@ class AccountRef:
 class CategoryRef:
     id: CategoryId
     name: str
-    emoji: str | None
+    icon: str | None
     group_id: CategoryGroupId | None
-    kind: CategoryKind | None
+    type: CategoryType | None
 
-class CategoryGroupRef:
+class CategoryGroupReference:
     id: CategoryGroupId
     name: str
-    kind: CategoryKind | None
+    type: CategoryType | None
 
 class TagRef:
     id: TagId

@@ -176,15 +176,8 @@ def list_accounts(
     session: AuthSession,
     *,
     filters: AccountFilter | None = None,
-    include_hidden: bool = False,
 ) -> list[Account]:
-    if filters is None:
-        filter_payload = AccountFilter(include_hidden=include_hidden).to_api()
-    else:
-        filter_payload = filters.to_api()
-    if include_hidden and "includeHidden" not in filter_payload:
-        filter_payload["includeHidden"] = True
-
+    filter_payload = filters.to_api() if filters is not None else {}
     data = graphql_request(
         session,
         "Common_GetAccounts",
@@ -215,13 +208,13 @@ def get_net_worth_performance(
     *,
     start_date: date | str | None = None,
     end_date: date | str | None = None,
-    account_filter: AccountFilter | None = None,
+    filters: AccountFilter | None = None,
     use_adaptive_granularity: bool | None = None,
 ) -> list[NetWorthSnapshot]:
     filter_payload: JsonDict = {
         "startDate": _date_value(start_date),
         "endDate": _date_value(end_date),
-        "accountFilters": account_filter.to_api() if account_filter is not None else None,
+        "accountFilters": filters.to_api() if filters is not None else None,
         "useAdaptiveGranularity": use_adaptive_granularity,
     }
     data = graphql_request(

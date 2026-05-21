@@ -34,7 +34,7 @@ def build_auth_headers(
     graphql: bool = False,
 ) -> dict[str, str]:
     headers = {
-        "Accept": "*" if graphql else "application/json",
+        "Accept": "*/*" if graphql else "application/json",
         "Client-Platform": "web",
         "Device-UUID": str(uuid4()),
         "Monarch-Client": (

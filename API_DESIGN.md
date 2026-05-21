@@ -45,6 +45,7 @@ Examples:
 - GraphQL `signedBalance` maps to public `balance`.
 - GraphQL `aggregateSnapshots` is exposed as `get_net_worth_performance`.
 - GraphQL `snapshotsByAccountType` is exposed as `get_net_worth_breakdown`.
+- GraphQL `deleteCategory` is exposed as `remove_category` because system categories are deactivated rather than truly deleted.
 
 GraphQL names may remain inside private query strings and mapping code, but they should not leak into public function names, type names, or field names unless the backend term is also the clearest user-facing term.
 
@@ -57,6 +58,7 @@ Good shared/domain types:
 - `AuthSession`
 - `Account`
 - `AccountType`
+- `CategoryType`
 - `Institution`
 - `AccountFilter`
 
@@ -88,7 +90,7 @@ Instead of:
 create_manual_account(session, ManualAccountCreate(...))
 ```
 
-Use `raw` sparingly on return types when preserving the original Monarch response is useful. Do not add `raw` to input/helper types.
+Use `raw` sparingly on backend-backed return types when preserving the original Monarch response is useful. Do not add `raw` to input/helper types or client-created convenience containers.
 
 ## Endpoint Usage
 

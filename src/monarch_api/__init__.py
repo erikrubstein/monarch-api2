@@ -12,6 +12,22 @@ from monarch_api.functions.accounts import (
     update_account,
 )
 from monarch_api.functions.auth import create_session, load_session, save_session
+from monarch_api.functions.categories import (
+    create_category,
+    create_category_group,
+    delete_category_group,
+    get_category,
+    get_category_catalog,
+    get_category_group,
+    list_categories,
+    list_category_groups,
+    reactivate_category,
+    remove_category,
+    reorder_category,
+    reorder_category_group,
+    update_category,
+    update_category_group,
+)
 from monarch_api.functions.common import (
     MfaRequiredError,
     MonarchAuthError,
@@ -32,6 +48,14 @@ from monarch_api.types.accounts import (
     NetWorthSnapshot,
 )
 from monarch_api.types.auth import AuthSession
+from monarch_api.types.categories import (
+    Category,
+    CategoryCatalog,
+    CategoryFilter,
+    CategoryGroup,
+    CategoryGroupReference,
+    CategoryType,
+)
 from monarch_api.types.common import User
 
 __all__ = [
@@ -41,6 +65,12 @@ __all__ = [
     "AccountHistoryPoint",
     "AccountType",
     "AuthSession",
+    "Category",
+    "CategoryCatalog",
+    "CategoryFilter",
+    "CategoryGroup",
+    "CategoryGroupReference",
+    "CategoryType",
     "Institution",
     "NetWorthBreakdownPoint",
     "MfaRequiredError",
@@ -50,18 +80,32 @@ __all__ = [
     "NetWorthSnapshot",
     "User",
     "build_auth_headers",
+    "create_category",
+    "create_category_group",
     "create_manual_account",
     "create_session",
     "delete_account",
+    "delete_category_group",
     "get_account",
     "get_account_history",
+    "get_category",
+    "get_category_catalog",
+    "get_category_group",
     "get_historical_balances",
     "get_net_worth_breakdown",
     "get_net_worth_performance",
     "graphql_request",
     "list_accounts",
+    "list_categories",
+    "list_category_groups",
     "load_session",
+    "reactivate_category",
+    "remove_category",
+    "reorder_category",
+    "reorder_category_group",
     "rest_request",
     "save_session",
     "update_account",
+    "update_category",
+    "update_category_group",
 ]

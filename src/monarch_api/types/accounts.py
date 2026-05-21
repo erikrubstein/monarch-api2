@@ -1,19 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
 
 from monarch_api.types.common import JsonDict, User
 
 
 def _clean(data: JsonDict) -> JsonDict:
     return {key: value for key, value in data.items() if value is not None}
-
-
-def _date_value(value: date | str | None) -> str | None:
-    if isinstance(value, date):
-        return value.isoformat()
-    return value
 
 
 @dataclass(slots=True)
@@ -99,10 +92,8 @@ class Account:
 
 @dataclass(slots=True)
 class AccountFilter:
-    ids: list[str] | None = None
-    account_type: str | None = None
+    account_ids: list[str] | None = None
     account_types: list[str] | None = None
-    account_subtype: str | None = None
     account_subtypes: list[str] | None = None
     groups: list[str] | None = None
     include_hidden: bool | None = None
@@ -111,10 +102,8 @@ class AccountFilter:
     def to_api(self) -> JsonDict:
         return _clean(
             {
-                "ids": self.ids,
-                "accountType": self.account_type,
+                "ids": self.account_ids,
                 "accountTypes": self.account_types,
-                "accountSubtype": self.account_subtype,
                 "accountSubtypes": self.account_subtypes,
                 "groups": self.groups,
                 "includeHidden": self.include_hidden,

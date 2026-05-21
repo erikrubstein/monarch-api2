@@ -9,6 +9,14 @@ from monarch_api.types.accounts import (
     NetWorthSnapshot,
 )
 from monarch_api.types.auth import AuthSession
+from monarch_api.types.categories import (
+    Category,
+    CategoryCatalog,
+    CategoryFilter,
+    CategoryGroup,
+    CategoryGroupReference,
+    CategoryType,
+)
 from monarch_api.types.common import User
 
 __all__ = [
@@ -18,6 +26,12 @@ __all__ = [
     "AccountHistoryPoint",
     "AccountType",
     "AuthSession",
+    "Category",
+    "CategoryCatalog",
+    "CategoryFilter",
+    "CategoryGroup",
+    "CategoryGroupReference",
+    "CategoryType",
     "Institution",
     "NetWorthBreakdownPoint",
     "NetWorthSnapshot",
