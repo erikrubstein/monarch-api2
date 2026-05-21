@@ -307,20 +307,24 @@ Actions should support merchant rename, category update, tag add/remove/set, hid
 
 ### Tags
 
-Tags owns tag definitions. Transaction-tag assignment belongs in Transactions because it edits a transaction.
+Tags owns household transaction tag definitions: names, colors, order, and transaction usage counts. Transaction-tag assignment belongs in Transactions because it edits a transaction.
 
 #### Core Functions
 
-- `list_tags(include_archived: bool = False) -> list[Tag]`
-- `search_tags(query: str, limit: int = 20) -> list[Tag]`
-- `get_tag(tag_id: TagId) -> Tag`
-- `create_tag(input: TagCreate) -> Tag`
-- `update_tag(tag_id: TagId, patch: TagPatch) -> Tag`
-- `delete_tag(tag_id: TagId) -> None`
-- `archive_tag(tag_id: TagId) -> Tag`
-- `restore_tag(tag_id: TagId) -> Tag`
-- `merge_tags(source_tag_ids: list[TagId], target_tag_id: TagId) -> Tag`
-- `get_tag_summary(tag_id: TagId, filter: TransactionFilter | None = None) -> TagSummary`
+- `list_tags(search: str | None = None, limit: int | None = None, include_transaction_count: bool = False) -> list[Tag]`
+- `get_tag(tag_id: TagId) -> Tag | None`
+- `create_tag(name: str, color: str) -> Tag`
+- `update_tag(tag_id: TagId, *, name: str | None = None, color: str | None = None) -> Tag`
+- `delete_tag(tag_id: TagId) -> bool`
+- `reorder_tag(tag_id: TagId, *, order: int) -> list[Tag]`
+
+#### Boundary With Transactions
+
+Tags should not own `set_transaction_tags()` or bulk transaction tagging. Those operations mutate transactions, so they belong in Transactions even though they use `Tag` objects.
+
+#### Deferred
+
+No archive, restore, merge, or tag-summary functions for now. The current recon points to delete/update/reorder operations, and tag-level spending summaries are better handled by Reports or Transactions filters if we need them later.
 
 ### Household
 
@@ -1271,25 +1275,8 @@ class Tag:
     name: str
     color: str | None
     order: int | None
-    is_archived: bool
     transaction_count: int | None
-    created_at: DateTime | None
-    updated_at: DateTime | None
-
-class TagCreate:
-    name: str
-    color: str | None
-
-class TagPatch:
-    name: str | None
-    color: str | None
-    is_archived: bool | None
-
-class TagSummary:
-    tag: Tag
-    total_spend: MoneyAmount
-    total_income: MoneyAmount
-    transaction_count: int
+    raw: JsonDict | None
 ```
 
 ### Household Types

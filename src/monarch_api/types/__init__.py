@@ -18,6 +18,7 @@ from monarch_api.types.categories import (
     CategoryType,
 )
 from monarch_api.types.common import User
+from monarch_api.types.tags import Tag
 
 __all__ = [
     "Account",
@@ -35,5 +36,6 @@ __all__ = [
     "Institution",
     "NetWorthBreakdownPoint",
     "NetWorthSnapshot",
+    "Tag",
     "User",
 ]

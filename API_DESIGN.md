@@ -61,6 +61,7 @@ Good shared/domain types:
 - `CategoryType`
 - `Institution`
 - `AccountFilter`
+- `Tag`
 
 Good return types:
 

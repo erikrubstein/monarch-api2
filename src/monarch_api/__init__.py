@@ -37,6 +37,14 @@ from monarch_api.functions.common import (
     graphql_request,
     rest_request,
 )
+from monarch_api.functions.tags import (
+    create_tag,
+    delete_tag,
+    get_tag,
+    list_tags,
+    reorder_tag,
+    update_tag,
+)
 from monarch_api.types.accounts import (
     Account,
     AccountBalance,
@@ -57,6 +65,7 @@ from monarch_api.types.categories import (
     CategoryType,
 )
 from monarch_api.types.common import User
+from monarch_api.types.tags import Tag
 
 __all__ = [
     "Account",
@@ -78,14 +87,17 @@ __all__ = [
     "MonarchError",
     "MonarchGraphQLError",
     "NetWorthSnapshot",
+    "Tag",
     "User",
     "build_auth_headers",
     "create_category",
     "create_category_group",
     "create_manual_account",
     "create_session",
+    "create_tag",
     "delete_account",
     "delete_category_group",
+    "delete_tag",
     "get_account",
     "get_account_history",
     "get_category",
@@ -94,18 +106,22 @@ __all__ = [
     "get_historical_balances",
     "get_net_worth_breakdown",
     "get_net_worth_performance",
+    "get_tag",
     "graphql_request",
     "list_accounts",
     "list_categories",
     "list_category_groups",
+    "list_tags",
     "load_session",
     "reactivate_category",
     "remove_category",
     "reorder_category",
     "reorder_category_group",
+    "reorder_tag",
     "rest_request",
     "save_session",
     "update_account",
     "update_category",
     "update_category_group",
+    "update_tag",
 ]
