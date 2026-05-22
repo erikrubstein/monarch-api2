@@ -62,6 +62,7 @@ Good shared/domain types:
 - `Institution`
 - `AccountFilter`
 - `Tag`
+- `Merchant`
 
 Good return types:
 

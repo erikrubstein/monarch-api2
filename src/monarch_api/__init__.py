@@ -37,6 +37,12 @@ from monarch_api.functions.common import (
     graphql_request,
     rest_request,
 )
+from monarch_api.functions.merchants import (
+    delete_merchant,
+    get_merchant,
+    list_merchants,
+    update_merchant,
+)
 from monarch_api.functions.tags import (
     create_tag,
     delete_tag,
@@ -65,6 +71,7 @@ from monarch_api.types.categories import (
     CategoryType,
 )
 from monarch_api.types.common import User
+from monarch_api.types.merchants import Merchant, MerchantSort
 from monarch_api.types.tags import Tag
 
 __all__ = [
@@ -83,6 +90,8 @@ __all__ = [
     "Institution",
     "NetWorthBreakdownPoint",
     "MfaRequiredError",
+    "Merchant",
+    "MerchantSort",
     "MonarchAuthError",
     "MonarchError",
     "MonarchGraphQLError",
@@ -97,6 +106,7 @@ __all__ = [
     "create_tag",
     "delete_account",
     "delete_category_group",
+    "delete_merchant",
     "delete_tag",
     "get_account",
     "get_account_history",
@@ -104,6 +114,7 @@ __all__ = [
     "get_category_catalog",
     "get_category_group",
     "get_historical_balances",
+    "get_merchant",
     "get_net_worth_breakdown",
     "get_net_worth_performance",
     "get_tag",
@@ -111,6 +122,7 @@ __all__ = [
     "list_accounts",
     "list_categories",
     "list_category_groups",
+    "list_merchants",
     "list_tags",
     "load_session",
     "reactivate_category",
@@ -123,5 +135,6 @@ __all__ = [
     "update_account",
     "update_category",
     "update_category_group",
+    "update_merchant",
     "update_tag",
 ]

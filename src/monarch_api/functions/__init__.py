@@ -27,6 +27,12 @@ from monarch_api.functions.categories import (
     update_category_group,
 )
 from monarch_api.functions.common import build_auth_headers, graphql_request, rest_request
+from monarch_api.functions.merchants import (
+    delete_merchant,
+    get_merchant,
+    list_merchants,
+    update_merchant,
+)
 from monarch_api.functions.tags import (
     create_tag,
     delete_tag,
@@ -45,12 +51,14 @@ __all__ = [
     "create_tag",
     "delete_account",
     "delete_category_group",
+    "delete_merchant",
     "delete_tag",
     "get_account",
     "get_account_history",
     "get_category",
     "get_category_catalog",
     "get_category_group",
+    "get_merchant",
     "get_tag",
     "get_historical_balances",
     "get_net_worth_breakdown",
@@ -59,6 +67,7 @@ __all__ = [
     "list_accounts",
     "list_categories",
     "list_category_groups",
+    "list_merchants",
     "list_tags",
     "load_session",
     "reactivate_category",
@@ -71,5 +80,6 @@ __all__ = [
     "update_account",
     "update_category",
     "update_category_group",
+    "update_merchant",
     "update_tag",
 ]

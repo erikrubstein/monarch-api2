@@ -263,21 +263,32 @@ The category page exposes some budget-adjacent fields such as budget variability
 
 ### Merchants
 
-Merchants owns normalized merchant records, aliases, logos, merchant-level stats, and merchant cleanup operations.
+Merchants owns normalized merchant records: display names, logos, usage counts, recurring flags, and merchant cleanup operations.
 
 #### Core Functions
 
-- `list_merchants(filter: MerchantFilter | None = None, page: PageRequest | None = None) -> Page[Merchant]`
-- `search_merchants(query: str, limit: int = 20) -> list[Merchant]`
-- `get_merchant(merchant_id: MerchantId) -> Merchant`
-- `get_merchant_summary(merchant_id: MerchantId, filter: TransactionFilter | None = None) -> MerchantSummary`
-- `update_merchant(merchant_id: MerchantId, patch: MerchantPatch) -> Merchant`
-- `merge_merchants(source_merchant_ids: list[MerchantId], target_merchant_id: MerchantId) -> Merchant`
-- `list_merchant_transactions(merchant_id: MerchantId, filter: TransactionFilter | None = None, page: PageRequest | None = None) -> Page[Transaction]`
+- `list_merchants(search: str | None = None, limit: int | None = None, offset: int | None = None, sort: MerchantSort = MerchantSort.TRANSACTION_COUNT) -> list[Merchant]`
+- `get_merchant(merchant_id: MerchantId) -> Merchant | None`
+- `update_merchant(merchant_id: MerchantId, *, name: str | None = None) -> Merchant`
+- `delete_merchant(merchant_id: MerchantId, *, move_to_merchant_id: MerchantId | None = None) -> bool`
+
+#### Boundary With Transactions
+
+Selecting a merchant for a transaction, recommended merchants for a transaction, and listing transactions for a merchant belong in Transactions. Those operations depend on transaction context or return transaction records.
+
+There is no planned standalone `create_merchant()` function right now. The recon data shows merchant search/list/update/delete operations, and the web app exposes "create new merchant" from merchant selection UI, but no dedicated `createMerchant` mutation. If Monarch creates merchant records implicitly when a transaction is created or updated with a new merchant name, that belongs in Transactions rather than Merchants.
 
 #### Boundary With Rules
 
 Rules own future automatic merchant renames. Merchants owns existing merchant records and cleanup.
+
+#### Boundary With Recurring
+
+Merchant detail can expose whether a merchant has active recurring streams, but editing recurrence settings belongs in Recurring.
+
+#### Deferred
+
+Merchant logo upload/update is deferred for now. Monarch supports `setMerchantLogo` using a Cloudinary public id and `deleteMerchantLogo`, but that crosses into asset upload handling and is not needed for the first merchant surface. Merchant spending summaries are better handled by Reports.
 
 ### Rules
 
@@ -1133,34 +1144,16 @@ class Merchant:
     id: MerchantId
     name: str
     logo_url: str | None
-    website_url: str | None
-    category: CategoryRef | None
     transaction_count: int | None
-    last_transaction_date: Date | None
-    created_at: DateTime | None
-    updated_at: DateTime | None
+    rule_count: int | None
+    can_be_deleted: bool | None
+    recurring_id: str | None
+    created_at: str | None
+    raw: JsonDict | None
 
-class MerchantFilter:
-    search: str | None
-    category_ids: list[CategoryId] | None
-    account_ids: list[AccountId] | None
-    has_recurring: bool | None
-    date_range: DateRange | None
-
-class MerchantPatch:
-    name: str | None
-    category_id: CategoryId | None
-    logo_url: str | None
-    website_url: str | None
-
-class MerchantSummary:
-    merchant: Merchant
-    total_spend: MoneyAmount
-    total_income: MoneyAmount
-    transaction_count: int
-    average_amount: MoneyAmount | None
-    first_transaction_date: Date | None
-    last_transaction_date: Date | None
+class MerchantSort(str, Enum):
+    NAME = "NAME"
+    TRANSACTION_COUNT = "TRANSACTION_COUNT"
 ```
 
 ### Rules Types
@@ -1381,7 +1374,7 @@ class MemberRef:
 
 1. Auth login/session support, MFA challenge handling, logout, current-user lookup, and password flows.
 2. Accounts read functions, manual accounts, balances, and net worth history.
-3. Categories, Tags, and Merchants read functions.
+3. Categories, Tags, and Merchants metadata functions.
 4. Transactions list/detail/update/split/delete with the full `TransactionFilter`.
 5. Cashflow summary and breakdown.
 6. Budget read and planned amount updates.

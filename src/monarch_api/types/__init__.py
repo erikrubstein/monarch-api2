@@ -18,6 +18,7 @@ from monarch_api.types.categories import (
     CategoryType,
 )
 from monarch_api.types.common import User
+from monarch_api.types.merchants import Merchant, MerchantSort
 from monarch_api.types.tags import Tag
 
 __all__ = [
@@ -34,6 +35,8 @@ __all__ = [
     "CategoryGroupReference",
     "CategoryType",
     "Institution",
+    "Merchant",
+    "MerchantSort",
     "NetWorthBreakdownPoint",
     "NetWorthSnapshot",
     "Tag",
