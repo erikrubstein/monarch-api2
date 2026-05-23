@@ -14,7 +14,11 @@ Functions and types are organized by product group:
 
 - `functions/auth.py`, `types/auth.py`
 - `functions/accounts.py`, `types/accounts.py`
-- future groups such as transactions, categories, merchants, budget, goals, tags, rules, household, etc.
+- `functions/categories.py`, `types/categories.py`
+- `functions/tags.py`, `types/tags.py`
+- `functions/merchants.py`, `types/merchants.py`
+- `functions/transactions.py`, `types/transactions.py`
+- future groups such as cashflow, reports, budget, recurring, goals, investments, rules, household, etc.
 
 Each group owns the concepts that naturally belong to that page or workflow in Monarch. If functionality overlaps, prefer a single clear owner and let other groups reference that object by id or by a shared type.
 

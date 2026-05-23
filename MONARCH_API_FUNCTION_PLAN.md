@@ -71,40 +71,36 @@ These are useful but may depend on provider-specific browser flows from Plaid, M
 
 ### Transactions
 
-Transactions owns transaction search, detail, edits, splits, manual transactions, deletion, review status, notes, attachments, and per-transaction associations.
+Transactions owns transaction search, detail, edits, manual transactions, deletion, review status, notes, and per-transaction associations.
 
 #### Core Functions
 
-- `list_transactions(filter: TransactionFilter | None = None, page: PageRequest | None = None, sort: TransactionSort | None = None) -> Page[Transaction]`
-- `get_transaction(transaction_id: TransactionId, include_splits: bool = True) -> Transaction`
-- `get_transaction_summary(filter: TransactionFilter | None = None) -> TransactionSummary`
-- `create_transaction(input: TransactionCreate) -> Transaction`
-- `update_transaction(transaction_id: TransactionId, patch: TransactionPatch) -> Transaction`
-- `bulk_update_transactions(transaction_ids: list[TransactionId], patch: TransactionPatch) -> BulkMutationResult[Transaction]`
-- `delete_transaction(transaction_id: TransactionId) -> None`
-- `bulk_delete_transactions(transaction_ids: list[TransactionId]) -> BulkMutationResult[None]`
-- `split_transaction(transaction_id: TransactionId, splits: list[TransactionSplitInput]) -> Transaction`
-- `update_transaction_splits(transaction_id: TransactionId, splits: list[TransactionSplitInput]) -> Transaction`
-- `unsplit_transaction(transaction_id: TransactionId) -> Transaction`
-- `list_transaction_splits(transaction_id: TransactionId) -> list[TransactionSplit]`
-- `hide_transaction(transaction_id: TransactionId) -> Transaction`
-- `unhide_transaction(transaction_id: TransactionId) -> Transaction`
-- `set_transaction_review_status(transaction_id: TransactionId, status: ReviewStatus, reviewer_id: MemberId | None = None) -> Transaction`
-- `set_transaction_tags(transaction_id: TransactionId, tag_ids: list[TagId]) -> Transaction`
-- `add_transaction_note(transaction_id: TransactionId, note: str) -> Transaction`
-- `clear_transaction_note(transaction_id: TransactionId) -> Transaction`
-- `list_transaction_attachments(transaction_id: TransactionId) -> list[TransactionAttachment]`
-- `add_transaction_attachment(transaction_id: TransactionId, file: FileUpload) -> TransactionAttachment`
-- `delete_transaction_attachment(transaction_id: TransactionId, attachment_id: AttachmentId) -> None`
-- `link_transaction_to_goal(transaction_id: TransactionId, goal_id: GoalId) -> Transaction`
-- `unlink_transaction_from_goal(transaction_id: TransactionId) -> Transaction`
+- `list_transactions(filters: TransactionFilter | None = None, limit: int = 100, offset: int = 0, sort: TransactionSort = TransactionSort.DATE_DESCENDING) -> TransactionPage`
+- `get_transaction(transaction_id: TransactionId, redirect_posted: bool = True) -> Transaction | None`
+- `create_transaction(*, account_id: AccountId, amount: MoneyAmount, date: Date, merchant_name: str, category_id: CategoryId, notes: str | None = None, owner_user_id: UserId | None = None, should_update_balance: bool | None = None) -> Transaction`
+- `update_transaction(transaction_id: TransactionId, *, date: Date | None = None, amount: MoneyAmount | None = None, account_id: AccountId | None = None, merchant_name: str | None = None, category_id: CategoryId | None = None, notes: str | None = None, hide_from_reports: bool | None = None, review_status: TransactionReviewStatus | None = None, needs_review_by_user_id: UserId | None = None, owner_user_id: UserId | None = None, tag_ids: list[TagId] | None = None) -> Transaction`
+- `delete_transaction(transaction_id: TransactionId) -> bool`
+- `get_transaction_splits(transaction_id: TransactionId) -> TransactionSplitDetails | None`
+- `update_transaction_splits(transaction_id: TransactionId, splits: list[TransactionSplitDraft]) -> TransactionSplitDetails`
+- `unsplit_transaction(transaction_id: TransactionId) -> TransactionSplitDetails`
+
+#### Build Phases
+
+Start with read and single-transaction workflows: list, detail, create manual transaction, update, delete, tag assignment through `update_transaction`, and full-set split editing. Bulk update/delete and multi-selection are intentionally out of scope for now because those operations can affect several transaction records.
+
+Transaction amounts follow Monarch's signed amount convention. Negative amounts are debits and positive amounts are credits.
+
+`update_transaction_splits()` replaces the full split set. Existing split ids should be included when editing existing split rows. Omitting an existing split row removes it. Percentage-based split helpers are deferred because Monarch's backend mutation accepts concrete split amounts.
 
 #### Non-Goals
 
-- Category creation belongs in Categories.
-- Tag creation belongs in Tags.
-- Merchant merging/renaming at the merchant record level belongs in Merchants.
+- Transactions should not duplicate category creation; that belongs in Categories.
+- Transactions should not duplicate tag creation; that belongs in Tags.
+- Transactions should not own merchant cleanup or renaming at the merchant-record level; that belongs in Merchants.
 - Rule creation from a transaction edit belongs in Rules.
+- Cashflow totals, chart aggregates, and transaction summary cards belong in Cashflow or Reports.
+- Explicit transaction-goal linking belongs in Goals, though transactions can expose goal ids/names when present.
+- Receipt upload, retail sync, and attachment upload flows are deferred until after core transaction editing. The backend supports them, but they cross into file/upload handling and retail-order matching.
 
 ### Cashflow
 
@@ -308,7 +304,7 @@ Rules owns transaction automation: matching criteria, actions, smart splits, ord
 - `preview_rule(input: RuleCreate | RulePatch, page: PageRequest | None = None) -> RulePreview`
 - `apply_rule_to_existing_transactions(rule_id: RuleId, filter: TransactionFilter | None = None) -> RuleApplyJob`
 - `get_rule_apply_status(job_id: str) -> RuleApplyStatus`
-- `create_rule_from_transaction_edit(transaction_id: TransactionId, edit: TransactionPatch, criteria: RuleCriteriaInput) -> Rule`
+- `create_rule_from_transaction_edit(transaction_id: TransactionId, criteria: RuleCriteriaInput) -> Rule`
 
 #### Rule Capabilities
 
@@ -331,7 +327,7 @@ Tags owns household transaction tag definitions: names, colors, order, and trans
 
 #### Boundary With Transactions
 
-Tags should not own `set_transaction_tags()` or bulk transaction tagging. Those operations mutate transactions, so they belong in Transactions even though they use `Tag` objects.
+Tags should not own transaction tag assignment. Tag assignment mutates transactions, so it belongs in `update_transaction(..., tag_ids=[...])` even though it uses `Tag` objects.
 
 #### Deferred
 
@@ -530,124 +526,160 @@ class NetWorthSnapshot:
 class Transaction:
     id: TransactionId
     date: Date
-    posted_at: DateTime | None
-    authorized_at: DateTime | None
     amount: MoneyAmount
-    direction: Literal["debit", "credit"] | None
-    type: Literal["income", "expense", "transfer", "investment", "unknown"]
-    account: AccountRef
-    merchant: MerchantRef | None
+    pending: bool | None
+    account: AccountReference | None
+    merchant: MerchantReference | None
     merchant_name: str
     original_statement: str | None
-    category: CategoryRef | None
-    tags: list[TagRef]
+    category: CategoryReference | None
+    tags: list[TagReference]
     notes: str | None
-    pending: bool
-    pending_transaction_id: TransactionId | None
-    reviewed: bool
-    needs_review: bool
-    reviewer: MemberRef | None
-    hidden_from_reports: bool
-    is_split: bool
-    parent_transaction_id: TransactionId | None
-    splits: list[TransactionSplit]
-    is_recurring: bool
-    recurring_id: RecurringId | None
-    goal_id: GoalId | None
-    has_attachments: bool
-    attachments: list[TransactionAttachment] | None
+    review_status: TransactionReviewStatus | None
+    needs_review: bool | None
+    needs_review_by_user: User | None
+    reviewed_at: DateTime | None
+    reviewed_by_user: User | None
+    hide_from_reports: bool | None
+    hidden_by_account: bool | None
+    is_split: bool | None
+    has_splits: bool | None
+    is_recurring: bool | None
+    recurring_id: str | None
+    goal: GoalReference | None
+    original_transaction_id: str | None
+    attachment_count: int
+    owner: User | None
+    is_manual: bool | None
     synced_from_institution: bool | None
     imported_from_mint: bool | None
-    created_at: DateTime | None
+    deleted_at: DateTime | None
     updated_at: DateTime | None
+    raw: JsonDict | None
 
 class TransactionFilter:
-    date_range: DateRange | None
+    start_date: Date | None
+    end_date: Date | None
     search: str | None
+    transaction_ids: list[TransactionId] | None
     account_ids: list[AccountId] | None
     category_ids: list[CategoryId] | None
     category_group_ids: list[CategoryGroupId] | None
     merchant_ids: list[MerchantId] | None
-    merchant_names: list[str] | None
     tag_ids: list[TagId] | None
     goal_ids: list[GoalId] | None
-    min_amount: MoneyAmount | None
-    max_amount: MoneyAmount | None
-    amount_operator: Literal["eq", "gt", "gte", "lt", "lte", "between"] | None
-    transaction_types: list[Literal["income", "expense", "transfer", "investment"]] | None
-    include_pending: bool = True
-    include_hidden: bool = False
-    hidden_from_reports: bool | None
-    is_split: bool | None
+    min_absolute_amount: MoneyAmount | None
+    max_absolute_amount: MoneyAmount | None
+    category_type: CategoryType | None
+    credits_only: bool | None
+    debits_only: bool | None
+    is_pending: bool | None
     is_recurring: bool | None
+    is_split: bool | None
+    is_uncategorized: bool | None
+    is_untagged: bool | None
     has_notes: bool | None
     has_attachments: bool | None
+    hide_from_reports: bool | None
     needs_review: bool | None
-    reviewed: bool | None
-    reviewed_by: list[MemberId] | None
+    needs_review_by_user_id: UserId | None
+    needs_review_unassigned: bool | None
     synced_from_institution: bool | None
     imported_from_mint: bool | None
+    transaction_visibility: TransactionVisibility | None
 
-class TransactionSort:
-    field: Literal["date", "amount", "merchant", "category", "account", "updated_at"]
-    direction: Literal["asc", "desc"] = "desc"
+class TransactionSort(str, Enum):
+    DATE_DESCENDING = "date"
+    DATE_ASCENDING = "inverse_date"
+    AMOUNT_DESCENDING = "amount"
+    AMOUNT_ASCENDING = "inverse_amount"
 
-class TransactionCreate:
-    date: Date
-    account_id: AccountId
-    amount: MoneyAmount
-    merchant_name: str
-    category_id: CategoryId | None
-    notes: str | None = None
-    tag_ids: list[TagId] | None = None
-    update_balance: bool = False
+class TransactionReviewStatus(str, Enum):
+    REVIEWED = "reviewed"
+    NEEDS_REVIEW = "needs_review"
 
-class TransactionPatch:
-    date: Date | None
-    amount: MoneyAmount | None
-    account_id: AccountId | None
-    merchant_name: str | None
-    merchant_id: MerchantId | None
-    category_id: CategoryId | None
-    notes: str | None
-    tag_ids: list[TagId] | None
-    hidden_from_reports: bool | None
-    reviewed: bool | None
-    needs_review: bool | None
-    goal_id: GoalId | None
+class TransactionVisibility(str, Enum):
+    ALL = "all_transactions"
+    VISIBLE_ONLY = "non_hidden_transactions_only"
+    HIDDEN_ONLY = "hidden_transactions_only"
+
+class TransactionPage:
+    transactions: list[Transaction]
+    total_count: int
+    limit: int
+    offset: int
+
+class AccountReference:
+    id: AccountId
+    display_name: str
+    logo_url: str | None
+    icon: str | None
+    raw: JsonDict | None
+
+class MerchantReference:
+    id: MerchantId
+    name: str
+    logo_url: str | None
+    transaction_count: int | None
+    recurring_id: str | None
+    raw: JsonDict | None
+
+class CategoryReference:
+    id: CategoryId
+    name: str
+    icon: str | None
+    group_id: CategoryGroupId | None
+    type: CategoryType | None
+    raw: JsonDict | None
+
+class TagReference:
+    id: TagId
+    name: str
+    color: str | None
+    order: int | None
+    raw: JsonDict | None
+
+class GoalReference:
+    id: GoalId
+    name: str | None
+    raw: JsonDict | None
 
 class TransactionSplit:
-    id: TransactionId | None
-    parent_transaction_id: TransactionId
-    date: Date
+    id: TransactionId
     amount: MoneyAmount
+    date: Date | None
+    merchant: MerchantReference | None
     merchant_name: str
-    category: CategoryRef | None
+    category: CategoryReference | None
+    goal: GoalReference | None
+    tags: list[TagReference]
     notes: str | None
-    tag_ids: list[TagId]
+    hide_from_reports: bool | None
+    review_status: TransactionReviewStatus | None
+    needs_review: bool | None
+    needs_review_by_user: User | None
+    owner: User | None
+    raw: JsonDict | None
 
-class TransactionSplitInput:
+class TransactionSplitDetails:
+    transaction: Transaction
+    splits: list[TransactionSplit]
+
+class TransactionSplitDraft:
     amount: MoneyAmount
-    category_id: CategoryId | None
+    id: TransactionId | None
+    date: Date | None
     merchant_name: str | None
+    category_id: CategoryId | None
     notes: str | None
+    hide_from_reports: bool | None
+    review_status: TransactionReviewStatus | None
+    needs_review: bool | None
+    needs_review_by_user_id: UserId | None
+    owner_user_id: UserId | None
     tag_ids: list[TagId] | None
+    goal_id: GoalId | None
 
-class TransactionAttachment:
-    id: AttachmentId
-    transaction_id: TransactionId
-    filename: str
-    content_type: str
-    size_bytes: int | None
-    url: str | None
-    created_at: DateTime | None
-
-class TransactionSummary:
-    total_count: int
-    income_total: MoneyAmount
-    expense_total: MoneyAmount
-    transfer_total: MoneyAmount
-    net_total: MoneyAmount
 ```
 
 ### Cashflow And Reports Types
@@ -818,7 +850,7 @@ class BudgetGroupRow:
     categories: list[BudgetCategoryRow]
 
 class BudgetCategoryRow:
-    category: CategoryRef
+    category: CategoryReference
     planned: MoneyAmount
     actual: MoneyAmount
     remaining: MoneyAmount
@@ -886,10 +918,10 @@ Frequency = Literal["weekly", "biweekly", "monthly", "quarterly", "yearly", "irr
 
 class RecurringItem:
     id: RecurringId
-    merchant: MerchantRef | None
+    merchant: MerchantReference | None
     merchant_name: str
-    account: AccountRef | None
-    category: CategoryRef | None
+    account: AccountReference | None
+    category: CategoryReference | None
     amount: MoneyAmount | None
     amount_range: AmountRange | None
     frequency: Frequency
@@ -915,8 +947,8 @@ class RecurringOccurrence:
     expected_date: Date
     expected_amount: MoneyAmount | None
     merchant_name: str
-    account: AccountRef | None
-    category: CategoryRef | None
+    account: AccountReference | None
+    category: CategoryReference | None
     matched_transaction_id: TransactionId | None
 
 class RecurringCalendarDay:
@@ -978,7 +1010,7 @@ class GoalPatch:
     status: GoalStatus | None
 
 class GoalAccountLink:
-    account: AccountRef
+    account: AccountReference
     allocation_amount: MoneyAmount | None
     allocation_percent: Decimal | None
 
@@ -1016,7 +1048,7 @@ class Security:
 
 class Holding:
     id: HoldingId
-    account: AccountRef
+    account: AccountReference
     security: Security
     quantity: Decimal
     price: MoneyAmount | None
@@ -1167,7 +1199,7 @@ class Rule:
     criteria: RuleCriteria
     actions: list[RuleAction]
     apply_to_existing: bool | None
-    created_by: MemberRef | None
+    created_by: MemberReference | None
     created_at: DateTime | None
     updated_at: DateTime | None
 
@@ -1336,13 +1368,13 @@ class SubscriptionDetails:
 Use reference types inside larger models to avoid pulling full object graphs everywhere.
 
 ```python
-class AccountRef:
+class AccountReference:
     id: AccountId
     display_name: str
     type: str | None
     subtype: str | None
 
-class CategoryRef:
+class CategoryReference:
     id: CategoryId
     name: str
     icon: str | None
@@ -1354,17 +1386,21 @@ class CategoryGroupReference:
     name: str
     type: CategoryType | None
 
-class TagRef:
+class TagReference:
     id: TagId
     name: str
     color: str | None
 
-class MerchantRef:
+class MerchantReference:
     id: MerchantId | None
     name: str
     logo_url: str | None
 
-class MemberRef:
+class GoalReference:
+    id: GoalId
+    name: str | None
+
+class MemberReference:
     id: MemberId
     display_name: str
     email: str | None
@@ -1375,7 +1411,7 @@ class MemberRef:
 1. Auth login/session support, MFA challenge handling, logout, current-user lookup, and password flows.
 2. Accounts read functions, manual accounts, balances, and net worth history.
 3. Categories, Tags, and Merchants metadata functions.
-4. Transactions list/detail/update/split/delete with the full `TransactionFilter`.
+4. Transactions list/detail/create/update/delete with tag assignment handled by `update_transaction` and the core `TransactionFilter`.
 5. Cashflow summary and breakdown.
 6. Budget read and planned amount updates.
 7. Recurring read functions.
