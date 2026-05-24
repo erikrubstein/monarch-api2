@@ -28,6 +28,11 @@ from monarch_api.functions.categories import (
     update_category,
     update_category_group,
 )
+from monarch_api.functions.cashflow import (
+    get_cashflow_breakdown,
+    get_cashflow_summary,
+    get_cashflow_trends,
+)
 from monarch_api.functions.common import (
     MfaRequiredError,
     MonarchAuthError,
@@ -80,6 +85,16 @@ from monarch_api.types.categories import (
     CategoryGroupReference,
     CategoryType,
 )
+from monarch_api.types.cashflow import (
+    CashflowBreakdown,
+    CashflowBreakdownDirection,
+    CashflowBreakdownGroup,
+    CashflowBreakdownRow,
+    CashflowFilter,
+    CashflowInterval,
+    CashflowSummary,
+    CashflowTrendPoint,
+)
 from monarch_api.types.common import User
 from monarch_api.types.merchants import Merchant, MerchantSort
 from monarch_api.types.tags import Tag
@@ -108,6 +123,14 @@ __all__ = [
     "AccountReference",
     "AccountType",
     "AuthSession",
+    "CashflowBreakdown",
+    "CashflowBreakdownDirection",
+    "CashflowBreakdownGroup",
+    "CashflowBreakdownRow",
+    "CashflowFilter",
+    "CashflowInterval",
+    "CashflowSummary",
+    "CashflowTrendPoint",
     "Category",
     "CategoryCatalog",
     "CategoryFilter",
@@ -152,6 +175,9 @@ __all__ = [
     "delete_transaction",
     "get_account",
     "get_account_history",
+    "get_cashflow_breakdown",
+    "get_cashflow_summary",
+    "get_cashflow_trends",
     "get_category",
     "get_category_catalog",
     "get_category_group",

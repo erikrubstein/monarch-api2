@@ -18,9 +18,51 @@ Functions and types are organized by product group:
 - `functions/tags.py`, `types/tags.py`
 - `functions/merchants.py`, `types/merchants.py`
 - `functions/transactions.py`, `types/transactions.py`
-- future groups such as cashflow, reports, budget, recurring, goals, investments, rules, household, etc.
+- `functions/cashflow.py`, `types/cashflow.py`
+- future groups such as reports, budget, recurring, goals, investments, rules, household, etc.
 
 Each group owns the concepts that naturally belong to that page or workflow in Monarch. If functionality overlaps, prefer a single clear owner and let other groups reference that object by id or by a shared type.
+
+## Group Workflow
+
+Build the API one product group at a time. Do not start by implementing every endpoint discovered in recon.
+
+For each group, use this workflow:
+
+1. Plan the group from the Monarch web app page or workflow.
+2. Decide which user-facing capabilities are fundamental and which should be deferred.
+3. Define ownership boundaries with neighboring groups so functionality is not duplicated.
+4. Identify the backend operations in `recon/` that support those capabilities.
+5. Design the public functions and types before writing implementation code.
+6. Refine names so they make sense in this API, even when Monarch's backend uses different names.
+7. Implement the smallest useful public surface.
+8. Run live read-only tests first when possible, then narrow write tests when the group includes mutations.
+9. Create or update ignored demo scripts in `demo/` that show normal usage through `demo/session.json`.
+10. Update docs with any design decisions, deferred behavior, or backend quirks discovered during implementation.
+11. Commit the group only after the implementation, docs, live tests, and demos are in a coherent state.
+
+The plan/refine step matters. It is acceptable, and expected, to rename functions, collapse types, or defer behavior before committing a group.
+
+## Implementation Checklist
+
+Each completed group should usually include:
+
+- one file in `src/monarch_api/functions/`
+- one file in `src/monarch_api/types/`
+- public exports in `src/monarch_api/functions/__init__.py`
+- public exports in `src/monarch_api/types/__init__.py`
+- public exports in `src/monarch_api/__init__.py`
+- documentation updates in `API_DESIGN.md` or `MONARCH_API_FUNCTION_PLAN.md`
+- an ignored demo script in `demo/` when the group has useful live behavior to show
+
+Before committing a group, run at least:
+
+```powershell
+python -m compileall src demo
+git status --short
+```
+
+Also run live Monarch calls using `demo/session.json` whenever the function can be safely tested. Prefer read-only live tests for list/detail/summary functions. For mutations, use narrow temporary records where possible and clean them up in the same test.
 
 ## Function Rules
 

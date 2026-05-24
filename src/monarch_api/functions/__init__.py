@@ -26,6 +26,11 @@ from monarch_api.functions.categories import (
     update_category,
     update_category_group,
 )
+from monarch_api.functions.cashflow import (
+    get_cashflow_breakdown,
+    get_cashflow_summary,
+    get_cashflow_trends,
+)
 from monarch_api.functions.common import build_auth_headers, graphql_request, rest_request
 from monarch_api.functions.merchants import (
     delete_merchant,
@@ -67,6 +72,9 @@ __all__ = [
     "delete_transaction",
     "get_account",
     "get_account_history",
+    "get_cashflow_breakdown",
+    "get_cashflow_summary",
+    "get_cashflow_trends",
     "get_category",
     "get_category_catalog",
     "get_category_group",

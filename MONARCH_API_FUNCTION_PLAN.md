@@ -104,19 +104,23 @@ Transaction amounts follow Monarch's signed amount convention. Negative amounts 
 
 ### Cashflow
 
-Cashflow owns opinionated cashflow-page data: income, expenses, savings, saving rate, and breakdowns by category group, category, merchant, account, or tag. It should return data ready for custom dashboards without requiring the caller to know Monarch's chart endpoints.
+Cashflow owns opinionated cashflow-page data: income, expenses, savings, savings rate, trend points, and category/group/merchant breakdowns. It should answer the practical cashflow questions without requiring the caller to know Monarch's chart endpoints or reproduce the visual page layout.
 
 #### Core Functions
 
-- `get_cashflow_summary(filter: CashflowFilter) -> CashflowSummary`
-- `get_cashflow_breakdown(filter: CashflowFilter, group_by: CashflowGroupBy = "category") -> list[CashflowBreakdownRow]`
-- `get_cashflow_trends(filter: CashflowFilter, interval: TimeInterval = "month", group_by: CashflowGroupBy | None = None) -> list[CashflowTrendPoint]`
-- `get_cashflow_sankey(filter: CashflowFilter, group_by: CashflowGroupBy = "category_group") -> SankeyGraph`
-- `get_savings_rate(filter: CashflowFilter, interval: TimeInterval = "month") -> list[SavingsRatePoint]`
+- `get_cashflow_summary(start_date: Date, end_date: Date, filters: CashflowFilter | None = None) -> CashflowSummary`
+- `get_cashflow_trends(start_date: Date, end_date: Date, interval: CashflowInterval = CashflowInterval.MONTH, filters: CashflowFilter | None = None) -> list[CashflowTrendPoint]`
+- `get_cashflow_breakdown(start_date: Date, end_date: Date, direction: CashflowBreakdownDirection, group_by: CashflowBreakdownGroup = CashflowBreakdownGroup.CATEGORY, filters: CashflowFilter | None = None) -> CashflowBreakdown`
 
 #### Boundary With Reports
 
 Cashflow should not own saved reports, chart presets, report export, or generic report metadata. Those belong in Reports. Cashflow can be implemented internally using the same lower-level operation as Reports, but the public surface should remain simple.
+
+#### Deferred
+
+- Sankey graphs and generic visual chart modes belong in Reports unless they become clearly necessary as a cashflow-specific helper.
+- Share/export behavior is UI/reporting functionality and should stay out of the first Cashflow surface.
+- Separate income-only and expense-only functions are unnecessary because `get_cashflow_breakdown()` already takes a direction.
 
 ### Reports
 
@@ -682,56 +686,72 @@ class TransactionSplitDraft:
 
 ```
 
-### Cashflow And Reports Types
+### Cashflow Types
 
 ```python
-CashflowGroupBy = Literal["category_group", "category", "merchant", "account", "tag"]
-TimeInterval = Literal["day", "week", "month", "quarter", "year"]
+class CashflowInterval(str, Enum):
+    MONTH = "month"
+    QUARTER = "quarter"
+    YEAR = "year"
+
+class CashflowBreakdownDirection(str, Enum):
+    INCOME = "income"
+    EXPENSES = "expenses"
+
+class CashflowBreakdownGroup(str, Enum):
+    CATEGORY = "category"
+    CATEGORY_GROUP = "category_group"
+    MERCHANT = "merchant"
 
 class CashflowFilter:
-    date_range: DateRange
-    account_ids: list[AccountId] | None
-    category_ids: list[CategoryId] | None
-    category_group_ids: list[CategoryGroupId] | None
-    merchant_ids: list[MerchantId] | None
-    tag_ids: list[TagId] | None
+    account_ids: list[str] | None
+    category_ids: list[str] | None
+    category_group_ids: list[str] | None
+    merchant_ids: list[str] | None
+    tag_ids: list[str] | None
     include_hidden: bool = False
-    include_transfers: bool = False
 
 class CashflowSummary:
-    income: MoneyAmount
-    expenses: MoneyAmount
-    net_cashflow: MoneyAmount
-    savings: MoneyAmount
-    savings_rate: Decimal | None
-    date_range: DateRange
-
-class CashflowBreakdownRow:
-    key: str
-    label: str
-    group_by: CashflowGroupBy
-    income: MoneyAmount
-    expenses: MoneyAmount
-    net: MoneyAmount
-    transaction_count: int
-    percent_of_total: Decimal | None
+    start_date: str
+    end_date: str
+    income: float
+    expenses: float
+    savings: float
+    savings_rate: float | None
+    raw: JsonDict | None
 
 class CashflowTrendPoint:
-    period_start: Date
-    period_end: Date
-    key: str | None
+    start_date: str
+    end_date: str
     label: str | None
-    income: MoneyAmount
-    expenses: MoneyAmount
-    net: MoneyAmount
+    income: float
+    expenses: float
+    savings: float
+    savings_rate: float | None
+    raw: JsonDict | None
 
-class SavingsRatePoint:
-    period_start: Date
-    period_end: Date
-    savings: MoneyAmount
-    income: MoneyAmount
-    savings_rate: Decimal | None
+class CashflowBreakdownRow:
+    id: str | None
+    name: str
+    amount: float
+    percent: float | None
+    transaction_count: int | None
+    category: CategoryReference | None
+    category_group: CategoryGroupReference | None
+    merchant: MerchantReference | None
+    raw: JsonDict | None
 
+class CashflowBreakdown:
+    direction: CashflowBreakdownDirection
+    group_by: CashflowBreakdownGroup
+    rows: list[CashflowBreakdownRow]
+```
+
+Cashflow summary values use positive numbers for both `income` and `expenses` because they model reporting totals rather than raw signed transaction rows. `savings` may be negative. Breakdown row `amount` values are signed within the selected direction, so negative income adjustments or expense refunds can appear as negative rows.
+
+### Reports Types
+
+```python
 class SankeyGraph:
     nodes: list[SankeyNode]
     links: list[SankeyLink]

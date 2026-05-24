@@ -17,6 +17,16 @@ from monarch_api.types.categories import (
     CategoryGroupReference,
     CategoryType,
 )
+from monarch_api.types.cashflow import (
+    CashflowBreakdown,
+    CashflowBreakdownDirection,
+    CashflowBreakdownGroup,
+    CashflowBreakdownRow,
+    CashflowFilter,
+    CashflowInterval,
+    CashflowSummary,
+    CashflowTrendPoint,
+)
 from monarch_api.types.common import User
 from monarch_api.types.merchants import Merchant, MerchantSort
 from monarch_api.types.tags import Tag
@@ -45,6 +55,14 @@ __all__ = [
     "AccountReference",
     "AccountType",
     "AuthSession",
+    "CashflowBreakdown",
+    "CashflowBreakdownDirection",
+    "CashflowBreakdownGroup",
+    "CashflowBreakdownRow",
+    "CashflowFilter",
+    "CashflowInterval",
+    "CashflowSummary",
+    "CashflowTrendPoint",
     "Category",
     "CategoryCatalog",
     "CategoryFilter",
