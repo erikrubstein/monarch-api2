@@ -48,6 +48,14 @@ from monarch_api.functions.merchants import (
     list_merchants,
     update_merchant,
 )
+from monarch_api.functions.reports import (
+    create_saved_report,
+    delete_saved_report,
+    get_report_data,
+    get_saved_report,
+    list_saved_reports,
+    update_saved_report,
+)
 from monarch_api.functions.tags import (
     create_tag,
     delete_tag,
@@ -97,6 +105,16 @@ from monarch_api.types.cashflow import (
 )
 from monarch_api.types.common import User
 from monarch_api.types.merchants import Merchant, MerchantSort
+from monarch_api.types.reports import (
+    ReportGroup,
+    ReportGroupValue,
+    ReportResult,
+    ReportRow,
+    ReportSort,
+    ReportSummary,
+    ReportTimeframe,
+    SavedReport,
+)
 from monarch_api.types.tags import Tag
 from monarch_api.types.transactions import (
     AccountReference,
@@ -149,6 +167,14 @@ __all__ = [
     "MonarchError",
     "MonarchGraphQLError",
     "NetWorthSnapshot",
+    "ReportGroup",
+    "ReportGroupValue",
+    "ReportResult",
+    "ReportRow",
+    "ReportSort",
+    "ReportSummary",
+    "ReportTimeframe",
+    "SavedReport",
     "Tag",
     "TagReference",
     "Transaction",
@@ -165,12 +191,14 @@ __all__ = [
     "create_category",
     "create_category_group",
     "create_manual_account",
+    "create_saved_report",
     "create_session",
     "create_tag",
     "create_transaction",
     "delete_account",
     "delete_category_group",
     "delete_merchant",
+    "delete_saved_report",
     "delete_tag",
     "delete_transaction",
     "get_account",
@@ -185,6 +213,8 @@ __all__ = [
     "get_merchant",
     "get_net_worth_breakdown",
     "get_net_worth_performance",
+    "get_report_data",
+    "get_saved_report",
     "get_tag",
     "get_transaction",
     "get_transaction_splits",
@@ -193,6 +223,7 @@ __all__ = [
     "list_categories",
     "list_category_groups",
     "list_merchants",
+    "list_saved_reports",
     "list_tags",
     "list_transactions",
     "load_session",
@@ -208,6 +239,7 @@ __all__ = [
     "update_category",
     "update_category_group",
     "update_merchant",
+    "update_saved_report",
     "update_tag",
     "update_transaction",
     "update_transaction_splits",

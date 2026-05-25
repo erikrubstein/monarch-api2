@@ -124,22 +124,28 @@ Cashflow should not own saved reports, chart presets, report export, or generic 
 
 ### Reports
 
-Reports owns generic report execution, saved reports, chart-oriented options, and report drilldowns. Reports may cover cash flow, spending, and income, but should not replace the simpler Cashflow helpers.
+Reports owns generic transaction aggregation and saved report presets. Reports may cover cash flow, spending, and income, but should not replace the simpler Cashflow helpers.
 
 #### Core Functions
 
-- `run_report(request: ReportRequest) -> ReportResult`
+- `get_report_data(filters: TransactionFilter | None = None, group_by: ReportGroup | list[ReportGroup] | None = ReportGroup.CATEGORY, timeframe: ReportTimeframe | None = None, sort_by: ReportSort | None = None, fill_empty_values: bool = True) -> ReportResult`
 - `list_saved_reports() -> list[SavedReport]`
-- `get_saved_report(report_id: ReportId) -> SavedReport`
-- `create_saved_report(input: SavedReportCreate) -> SavedReport`
-- `update_saved_report(report_id: ReportId, patch: SavedReportPatch) -> SavedReport`
-- `delete_saved_report(report_id: ReportId) -> None`
-- `export_report(report_id: ReportId | None = None, request: ReportRequest | None = None, format: ExportFormat = "csv") -> ReportExport`
-- `get_report_drilldown_filter(request: ReportRequest, selection: ReportSelection) -> TransactionFilter`
+- `get_saved_report(report_id: ReportId) -> SavedReport | None`
+- `create_saved_report(name: str, filters: TransactionFilter | None = None, group_by: ReportGroup | list[ReportGroup] | None = ReportGroup.CATEGORY, timeframe: ReportTimeframe | None = None) -> SavedReport`
+- `update_saved_report(report_id: ReportId, *, name: str) -> SavedReport`
+- `delete_saved_report(report_id: ReportId) -> bool`
+
+#### Build Notes
+
+The first Reports surface intentionally uses keyword arguments instead of a `ReportRequest` input type. A report is just a transaction filter plus grouping options.
+
+Saved reports are exposed as saved reports even though Monarch's backend calls them report configurations. The current backend schema supports creating saved reports with filters and view dimensions, deleting saved reports, and renaming saved reports. It does not expose an update input for changing the saved filters or view; changing those requires deleting and recreating the saved report.
+
+Chart-specific UI settings such as chart type, density, layout, and AI report generation are deferred. Saved report raw data preserves Monarch's full response for callers that need those details.
 
 #### Boundary With Transactions
 
-Reports should not return full transaction pages directly for drilldowns. It should return a `TransactionFilter` that can be passed to `Transactions.list_transactions(...)`.
+Reports should not return full transaction pages directly for drilldowns. Callers can use the same `TransactionFilter` passed to `get_report_data()` with `Transactions.list_transactions(...)`.
 
 ### Budget
 
@@ -752,85 +758,63 @@ Cashflow summary values use positive numbers for both `income` and `expenses` be
 ### Reports Types
 
 ```python
-class SankeyGraph:
-    nodes: list[SankeyNode]
-    links: list[SankeyLink]
+class ReportGroup(str, Enum):
+    CATEGORY = "category"
+    CATEGORY_GROUP = "category_group"
+    MERCHANT = "merchant"
 
-class SankeyNode:
-    id: str
-    label: str
-    kind: Literal["income", "category_group", "category", "merchant", "expense", "savings"]
+class ReportTimeframe(str, Enum):
+    DAY = "day"
+    WEEK = "week"
+    MONTH = "month"
+    QUARTER = "quarter"
+    YEAR = "year"
 
-class SankeyLink:
-    source: str
-    target: str
-    amount: MoneyAmount
-```
-
-```python
-ReportKind = Literal["cashflow", "spending", "income"]
-ReportMode = Literal["breakdown", "trends"]
-ReportChartType = Literal["sankey", "donut", "horizontal_bar", "grouped_bar", "stacked_bar"]
-ExportFormat = Literal["csv", "xlsx", "json", "png"]
-
-class ReportRequest:
-    kind: ReportKind
-    mode: ReportMode
-    chart_type: ReportChartType | None
-    date_range: DateRange
-    interval: TimeInterval | None
-    group_by: CashflowGroupBy
-    filter: TransactionFilter | CashflowFilter | None
+class ReportSort(str, Enum):
+    TOTAL = "sum"
+    INCOME = "sum_income"
+    EXPENSES = "sum_expense"
+    COUNT = "count"
+    AVERAGE = "avg"
+    MAX = "max"
 
 class ReportResult:
-    request: ReportRequest
-    summary: CashflowSummary | None
+    summary: ReportSummary
     rows: list[ReportRow]
-    series: list[ReportSeries] | None
-    sankey: SankeyGraph | None
+    raw: JsonDict | None
 
 class ReportRow:
-    key: str
-    label: str
-    amount: MoneyAmount
-    transaction_count: int
-    percent_of_total: Decimal | None
+    group: ReportGroupValue
+    summary: ReportSummary
+    raw: JsonDict | None
 
-class ReportSeries:
-    key: str
-    label: str
-    points: list[ReportPoint]
+class ReportGroupValue:
+    date: str | None
+    category: CategoryReference | None
+    category_group: CategoryGroupReference | None
+    merchant: MerchantReference | None
+    raw: JsonDict | None
 
-class ReportPoint:
-    period_start: Date
-    period_end: Date
-    amount: MoneyAmount
+class ReportSummary:
+    total: float | None
+    average: float | None
+    count: int | None
+    max: float | None
+    income: float | None
+    expenses: float | None
+    savings: float | None
+    savings_rate: float | None
+    first_date: str | None
+    last_date: str | None
+    raw: JsonDict | None
 
 class SavedReport:
     id: ReportId
     name: str
-    request: ReportRequest
-    created_at: DateTime
-    updated_at: DateTime
-
-class SavedReportCreate:
-    name: str
-    request: ReportRequest
-
-class SavedReportPatch:
-    name: str | None
-    request: ReportRequest | None
-
-class ReportSelection:
-    key: str
-    period_start: Date | None
-    period_end: Date | None
-
-class ReportExport:
-    filename: str
-    content_type: str
-    bytes: bytes | None
-    url: str | None
+    filters: TransactionFilter | None
+    group_by: list[ReportGroup] | None
+    timeframe: ReportTimeframe | None
+    raw: JsonDict | None
 ```
 
 ### Budget Types
