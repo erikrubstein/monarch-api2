@@ -39,6 +39,16 @@ from monarch_api.types.reports import (
     ReportTimeframe,
     SavedReport,
 )
+from monarch_api.types.recurring import (
+    RecurringFilter,
+    RecurringFrequency,
+    RecurringOccurrence,
+    RecurringStatus,
+    RecurringStream,
+    RecurringSummary,
+    RecurringSummaryBucket,
+    RecurringType,
+)
 from monarch_api.types.tags import Tag
 from monarch_api.types.transactions import (
     AccountReference,
@@ -94,6 +104,14 @@ __all__ = [
     "ReportSort",
     "ReportSummary",
     "ReportTimeframe",
+    "RecurringFilter",
+    "RecurringFrequency",
+    "RecurringOccurrence",
+    "RecurringStatus",
+    "RecurringStream",
+    "RecurringSummary",
+    "RecurringSummaryBucket",
+    "RecurringType",
     "SavedReport",
     "Tag",
     "TagReference",

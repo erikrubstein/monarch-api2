@@ -172,23 +172,29 @@ Budget may show goal contributions or goal-related rows, but creating goals, ass
 
 ### Recurring
 
-Recurring owns recurring merchant/series records, upcoming expected transactions, recurring detection metadata, and recurring-specific filters.
+Recurring owns recurring streams, upcoming expected occurrences, recurring summaries, and recurring-specific filters.
 
 #### Core Functions
 
-- `list_recurring_items(filter: RecurringFilter | None = None) -> list[RecurringItem]`
-- `get_recurring_item(recurring_id: RecurringId) -> RecurringItem`
-- `list_upcoming_recurring_transactions(filter: RecurringFilter | None = None) -> list[RecurringOccurrence]`
-- `get_recurring_calendar(start_date: Date, end_date: Date, filter: RecurringFilter | None = None) -> list[RecurringCalendarDay]`
-- `mark_transaction_recurring(transaction_id: TransactionId, input: RecurringCreateFromTransaction) -> RecurringItem`
-- `update_recurring_item(recurring_id: RecurringId, patch: RecurringPatch) -> RecurringItem`
-- `delete_recurring_item(recurring_id: RecurringId) -> None`
-- `ignore_recurring_item(recurring_id: RecurringId) -> RecurringItem`
-- `restore_recurring_item(recurring_id: RecurringId) -> RecurringItem`
+- `list_recurring_streams(filters: RecurringFilter | None = None, include_pending: bool = True, include_liabilities: bool = True) -> list[RecurringStream]`
+- `get_recurring_stream(recurring_id: RecurringId, include_liabilities: bool = True) -> RecurringStream | None`
+- `list_recurring_occurrences(start_date: Date, end_date: Date, filters: RecurringFilter | None = None, include_liabilities: bool = True) -> list[RecurringOccurrence]`
+- `get_recurring_summary(start_date: Date, end_date: Date, filters: RecurringFilter | None = None) -> RecurringSummary`
+- `create_recurring_stream(merchant_id: MerchantId, *, frequency: str, amount: MoneyAmount, base_date: Date, is_active: bool = True) -> RecurringStream`
+- `update_recurring_stream(recurring_id: RecurringId, *, frequency: str | None = None, amount: MoneyAmount | None = None, base_date: Date | None = None, is_active: bool | None = None) -> RecurringStream`
+- `remove_recurring_stream(recurring_id: RecurringId) -> bool`
+
+#### Build Notes
+
+Monarch's backend calls the recurring series a stream. The public API uses that term because it cleanly separates a recurring stream, such as "Rent monthly", from recurring occurrences, such as "Rent expected on June 1".
+
+`create_recurring_stream()` and `update_recurring_stream()` use Monarch's merchant recurrence mutation. This creates or updates merchant-backed streams. Liability-backed recurring streams do not expose the same mutation shape and are not supported by these functions.
+
+`remove_recurring_stream()` removes the recurrence from Monarch's recurring stream list. Under the hood, Monarch marks the stream as not recurring rather than deleting a user-owned object.
 
 #### Boundary With Transactions
 
-Recurring should identify expected activity and recurrence metadata. Editing the underlying transaction amount, date, category, merchant, notes, tags, or split belongs in Transactions.
+Recurring should identify expected activity and recurrence metadata. Editing the underlying transaction amount, date, category, merchant, notes, tags, or split belongs in Transactions. Paycheck CRUD and liability statement payment workflows are deferred.
 
 ### Goals
 
@@ -918,58 +924,85 @@ class BudgetSettingsPatch:
 ### Recurring Types
 
 ```python
-Frequency = Literal["weekly", "biweekly", "monthly", "quarterly", "yearly", "irregular", "unknown"]
+class RecurringFrequency(str, Enum):
+    WEEKLY = "weekly"
+    EVERY_TWO_WEEKS = "every_two_weeks"
+    TWICE_A_MONTH = "twice_a_month"
+    MONTHLY = "monthly"
+    EVERY_TWO_MONTHS = "every_two_months"
+    QUARTERLY = "quarterly"
+    EVERY_SIX_MONTHS = "every_six_months"
+    YEARLY = "yearly"
 
-class RecurringItem:
-    id: RecurringId
-    merchant: MerchantReference | None
-    merchant_name: str
-    account: AccountReference | None
-    category: CategoryReference | None
-    amount: MoneyAmount | None
-    amount_range: AmountRange | None
-    frequency: Frequency
-    next_expected_date: Date | None
-    last_seen_date: Date | None
-    status: Literal["active", "ignored", "ended", "unknown"]
-    transaction_ids: list[TransactionId]
+class RecurringType(str, Enum):
+    EXPENSE = "expense"
+    INCOME = "income"
+    TRANSFER = "transfer"
+    CREDIT_CARD = "credit_card"
 
-class AmountRange:
-    min_amount: MoneyAmount
-    max_amount: MoneyAmount
+class RecurringStatus(str, Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    PENDING = "pending"
+    IGNORED = "ignored"
 
 class RecurringFilter:
     account_ids: list[AccountId] | None
-    merchant_ids: list[MerchantId] | None
     category_ids: list[CategoryId] | None
-    frequencies: list[Frequency] | None
-    status: list[str] | None
-    date_range: DateRange | None
+    merchant_ids: list[MerchantId] | None
+    recurring_ids: list[RecurringId] | None
+    frequencies: list[RecurringFrequency | str] | None
+    recurring_types: list[RecurringType | str] | None
+    is_completed: bool | None
+
+class RecurringStream:
+    id: RecurringId
+    name: str
+    frequency: str | None
+    amount: float | None
+    next_date: str | None
+    next_amount: float | None
+    base_date: str | None
+    day_of_month: int | None
+    is_active: bool | None
+    is_approximate: bool | None
+    recurring_type: RecurringType | None
+    status: RecurringStatus | None
+    merchant: MerchantReference | None
+    account: AccountReference | None
+    category: CategoryReference | None
+    liability_account_id: AccountId | None
+    raw: JsonDict | None
 
 class RecurringOccurrence:
     recurring_id: RecurringId
-    expected_date: Date
-    expected_amount: MoneyAmount | None
-    merchant_name: str
+    date: str
+    amount: float | None
+    name: str
+    frequency: str | None
+    merchant: MerchantReference | None
     account: AccountReference | None
     category: CategoryReference | None
-    matched_transaction_id: TransactionId | None
+    transaction_id: TransactionId | None
+    is_past: bool | None
+    is_late: bool | None
+    is_completed: bool | None
+    marked_paid_at: str | None
+    raw: JsonDict | None
 
-class RecurringCalendarDay:
-    date: Date
-    occurrences: list[RecurringOccurrence]
+class RecurringSummary:
+    expense: RecurringSummaryBucket
+    income: RecurringSummaryBucket
+    credit_card: RecurringSummaryBucket
+    raw: JsonDict | None
 
-class RecurringCreateFromTransaction:
-    frequency: Frequency | None
-    next_expected_date: Date | None
-    amount: MoneyAmount | None
-
-class RecurringPatch:
-    frequency: Frequency | None
-    next_expected_date: Date | None
-    amount: MoneyAmount | None
-    category_id: CategoryId | None
-    status: str | None
+class RecurringSummaryBucket:
+    completed: float | None
+    remaining: float | None
+    total: float | None
+    count: int | None
+    pending_amount_count: int | None
+    raw: JsonDict | None
 ```
 
 ### Goals Types
