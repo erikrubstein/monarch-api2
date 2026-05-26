@@ -28,6 +28,16 @@ from monarch_api.types.cashflow import (
     CashflowTrendPoint,
 )
 from monarch_api.types.common import User
+from monarch_api.types.goals import (
+    Goal,
+    GoalAccountBalanceLink,
+    GoalAllocationSummary,
+    GoalBudgetAmount,
+    GoalEvent,
+    GoalEventType,
+    GoalStatus,
+    GoalType,
+)
 from monarch_api.types.household import (
     Household,
     HouseholdMember,
@@ -98,6 +108,14 @@ __all__ = [
     "CategoryReference",
     "CategoryType",
     "GoalReference",
+    "Goal",
+    "GoalAccountBalanceLink",
+    "GoalAllocationSummary",
+    "GoalBudgetAmount",
+    "GoalEvent",
+    "GoalEventType",
+    "GoalStatus",
+    "GoalType",
     "Household",
     "HouseholdMember",
     "HouseholdPreferences",

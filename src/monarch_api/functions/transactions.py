@@ -309,6 +309,29 @@ mutation Web_SetTransactionTags($input: SetTransactionTagsInput!) {
     + TRANSACTION_FIELDS
 )
 
+LINK_TRANSACTION_TO_GOAL_MUTATION = """
+mutation Common_LinkTransactionToGoal($input: LinkTransactionToGoalInput!) {
+  linkTransactionToGoal(input: $input) {
+    goalEvent {
+      id
+      transaction {
+        id
+        savingsGoalEvent {
+          id
+          goal {
+            id
+          }
+        }
+      }
+    }
+    errors {
+      message
+      code
+    }
+  }
+}
+"""
+
 
 def list_transactions(
     session: AuthSession,
@@ -393,6 +416,7 @@ def create_transaction(
     notes: str | None = None,
     owner_user_id: str | None = None,
     should_update_balance: bool | None = None,
+    goal_id: str | None = None,
 ) -> Transaction:
     data = graphql_request(
         session,
@@ -419,6 +443,16 @@ def create_transaction(
     transaction = get_transaction(session, transaction_id)
     if transaction is None:
         raise MonarchError("Monarch created the transaction but did not return it.")
+    if goal_id is not None:
+        _link_transaction_to_goal(
+            session,
+            transaction_id,
+            goal_id,
+            account_id=transaction.account.id if transaction.account else account_id,
+        )
+        transaction = get_transaction(session, transaction_id)
+        if transaction is None:
+            raise MonarchError("Transaction not found after goal link.")
     return transaction
 
 
@@ -459,9 +493,15 @@ def update_transaction(
     needs_review_by_user_id: str | None = None,
     owner_user_id: str | None = None,
     tag_ids: Sequence[str] | None = None,
+    goal_id: str | None = None,
+    clear_goal: bool = False,
 ) -> Transaction:
-    current = get_transaction(session, transaction_id) if account_id is not None else None
-    if account_id is not None and current is None:
+    if goal_id is not None and clear_goal:
+        raise ValueError("goal_id and clear_goal cannot both be set.")
+
+    needs_current = account_id is not None or goal_id is not None
+    current = get_transaction(session, transaction_id) if needs_current else None
+    if needs_current and current is None:
         raise MonarchError("Transaction not found.")
 
     updates = _clean(
@@ -500,6 +540,28 @@ def update_transaction(
 
     if tag_ids is not None:
         updated_transaction = _update_transaction_tags(session, transaction_id, tag_ids)
+
+    if clear_goal:
+        _link_transaction_to_goal(session, transaction_id, None)
+        updated_transaction = get_transaction(session, transaction_id)
+        if updated_transaction is None:
+            raise MonarchError("Transaction not found after goal unlink.")
+
+    if goal_id is not None:
+        account = (
+            updated_transaction.account
+            if updated_transaction is not None
+            else current.account if current is not None else None
+        )
+        _link_transaction_to_goal(
+            session,
+            transaction_id,
+            goal_id,
+            account_id=account.id if account is not None else None,
+        )
+        updated_transaction = get_transaction(session, transaction_id)
+        if updated_transaction is None:
+            raise MonarchError("Transaction not found after goal link.")
 
     if updated_transaction is not None:
         return updated_transaction
@@ -568,6 +630,31 @@ def _update_transaction_tags(
     payload = _payload(data, "setTransactionTags")
     _raise_payload_errors(payload)
     return _transaction_payload(payload, "updated")
+
+
+def _link_transaction_to_goal(
+    session: AuthSession,
+    transaction_id: str,
+    goal_id: str | None,
+    *,
+    account_id: str | None = None,
+) -> None:
+    data = graphql_request(
+        session,
+        "Common_LinkTransactionToGoal",
+        LINK_TRANSACTION_TO_GOAL_MUTATION,
+        {
+            "input": _clean(
+                {
+                    "transactionId": transaction_id,
+                    "goalId": goal_id,
+                    "accountId": account_id,
+                }
+            )
+        },
+    )
+    payload = _payload(data, "linkTransactionToGoal")
+    _raise_payload_errors(payload)
 
 
 def _split_details_from_transaction(data: JsonDict) -> TransactionSplitDetails:

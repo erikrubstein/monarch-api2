@@ -77,8 +77,8 @@ Transactions owns transaction search, detail, edits, manual transactions, deleti
 
 - `list_transactions(filters: TransactionFilter | None = None, limit: int = 100, offset: int = 0, sort: TransactionSort = TransactionSort.DATE_DESCENDING) -> TransactionPage`
 - `get_transaction(transaction_id: TransactionId, redirect_posted: bool = True) -> Transaction | None`
-- `create_transaction(*, account_id: AccountId, amount: MoneyAmount, date: Date, merchant_name: str, category_id: CategoryId, notes: str | None = None, owner_user_id: UserId | None = None, should_update_balance: bool | None = None) -> Transaction`
-- `update_transaction(transaction_id: TransactionId, *, date: Date | None = None, amount: MoneyAmount | None = None, account_id: AccountId | None = None, merchant_name: str | None = None, category_id: CategoryId | None = None, notes: str | None = None, hide_from_reports: bool | None = None, review_status: TransactionReviewStatus | None = None, needs_review_by_user_id: UserId | None = None, owner_user_id: UserId | None = None, tag_ids: list[TagId] | None = None) -> Transaction`
+- `create_transaction(*, account_id: AccountId, amount: MoneyAmount, date: Date, merchant_name: str, category_id: CategoryId, notes: str | None = None, owner_user_id: UserId | None = None, should_update_balance: bool | None = None, goal_id: GoalId | None = None) -> Transaction`
+- `update_transaction(transaction_id: TransactionId, *, date: Date | None = None, amount: MoneyAmount | None = None, account_id: AccountId | None = None, merchant_name: str | None = None, category_id: CategoryId | None = None, notes: str | None = None, hide_from_reports: bool | None = None, review_status: TransactionReviewStatus | None = None, needs_review_by_user_id: UserId | None = None, owner_user_id: UserId | None = None, tag_ids: list[TagId] | None = None, goal_id: GoalId | None = None, clear_goal: bool = False) -> Transaction`
 - `delete_transaction(transaction_id: TransactionId) -> bool`
 - `get_transaction_splits(transaction_id: TransactionId) -> TransactionSplitDetails | None`
 - `update_transaction_splits(transaction_id: TransactionId, splits: list[TransactionSplitDraft]) -> TransactionSplitDetails`
@@ -90,6 +90,8 @@ Start with read and single-transaction workflows: list, detail, create manual tr
 
 Transaction amounts follow Monarch's signed amount convention. Negative amounts are debits and positive amounts are credits.
 
+Savings-goal transaction assignment uses Monarch's `Common_LinkTransactionToGoal` flow. This matches the current webapp behavior and can link a transaction even when its account was not already associated with the goal.
+
 `update_transaction_splits()` replaces the full split set. Existing split ids should be included when editing existing split rows. Omitting an existing split row removes it. Percentage-based split helpers are deferred because Monarch's backend mutation accepts concrete split amounts.
 
 #### Non-Goals
@@ -99,7 +101,7 @@ Transaction amounts follow Monarch's signed amount convention. Negative amounts 
 - Transactions should not own merchant cleanup or renaming at the merchant-record level; that belongs in Merchants.
 - Rule creation from a transaction edit belongs in Rules.
 - Cashflow totals, chart aggregates, and transaction summary cards belong in Cashflow or Reports.
-- Explicit transaction-goal linking belongs in Goals, though transactions can expose goal ids/names when present.
+- Explicit transaction-goal assignment belongs in Transactions because callers set it while creating or editing transactions. Goals owns savings-goal records, events, budget amounts, and account balance links.
 - Receipt upload, retail sync, and attachment upload flows are deferred until after core transaction editing. The backend supports them, but they cross into file/upload handling and retail-order matching.
 
 ### Cashflow
@@ -198,27 +200,35 @@ Recurring should identify expected activity and recurrence metadata. Editing the
 
 ### Goals
 
-Goals owns savings, debt payoff, retirement, and custom goal records; account links; contribution rules at the goal level; and goal progress.
+Goals owns savings-goal records, account balance links, goal events, budgeted contribution amounts, and goal progress. Assigning an existing transaction to a goal belongs in Transactions.
 
 #### Core Functions
 
-- `list_goals(filter: GoalFilter | None = None) -> list[Goal]`
-- `get_goal(goal_id: GoalId) -> Goal`
-- `create_goal(input: GoalCreate) -> Goal`
-- `update_goal(goal_id: GoalId, patch: GoalPatch) -> Goal`
-- `delete_goal(goal_id: GoalId) -> None`
+- `list_goals(include_archived: bool = False) -> list[Goal]`
+- `get_goal(goal_id: GoalId) -> Goal | None`
+- `create_goal(*, name: str, goal_type: GoalType | str = GoalType.CUSTOM, target_amount: MoneyAmount | None = None, target_date: Date | None = None, planned_monthly_contribution: MoneyAmount | None = None, is_sinking_fund: bool | None = None, priority: int | None = None, image_storage_provider: str | None = None, image_storage_provider_id: str | None = None) -> Goal`
+- `update_goal(goal_id: GoalId, *, name: str | None = None, goal_type: GoalType | str | None = None, target_amount: MoneyAmount | None = None, target_date: Date | None = None, planned_monthly_contribution: MoneyAmount | None = None, status: GoalStatus | str | None = None, is_sinking_fund: bool | None = None, priority: int | None = None, image_storage_provider: str | None = None, image_storage_provider_id: str | None = None) -> Goal`
+- `delete_goal(goal_id: GoalId) -> bool`
 - `archive_goal(goal_id: GoalId) -> Goal`
 - `restore_goal(goal_id: GoalId) -> Goal`
-- `set_goal_account_links(goal_id: GoalId, links: list[GoalAccountLinkInput]) -> Goal`
-- `get_goal_progress(goal_id: GoalId, as_of: Date | None = None) -> GoalProgress`
-- `list_goal_transactions(goal_id: GoalId, page: PageRequest | None = None) -> Page[Transaction]`
-- `link_goal_transaction(goal_id: GoalId, transaction_id: TransactionId) -> GoalTransactionLink`
-- `unlink_goal_transaction(goal_id: GoalId, transaction_id: TransactionId) -> None`
-- `set_goal_priority(goal_ids_in_order: list[GoalId]) -> list[Goal]`
+- `update_goal_priorities(goal_ids: list[GoalId]) -> list[Goal]`
+- `link_goal_account_balance(goal_id: GoalId, account_id: AccountId, *, use_entire_balance: bool = True, amount: MoneyAmount | None = None) -> Goal`
+- `unlink_goal_account(goal_id: GoalId, account_id: AccountId) -> Goal`
+- `list_goal_events(goal_id: GoalId) -> list[GoalEvent]`
+- `contribute_to_goal(goal_id: GoalId, account_id: AccountId, *, amount: MoneyAmount, date: Date | None = None, include_in_budget: bool | None = None, notes: str | None = None) -> GoalEvent`
+- `withdraw_from_goal(goal_id: GoalId, account_id: AccountId, *, amount: MoneyAmount, date: Date | None = None, include_in_budget: bool | None = None, notes: str | None = None) -> GoalEvent`
+- `update_goal_event(event_id: GoalEventId, *, date: Date | None = None, include_in_budget: bool | None = None, notes: str | None = None) -> GoalEvent`
+- `delete_goal_event(event_id: GoalEventId) -> bool`
+- `get_goal_budget_amounts(goal_id: GoalId, start_month: Date, end_month: Date) -> list[GoalBudgetAmount]`
+- `set_goal_budget_amount(goal_id: GoalId, month: Date, amount: MoneyAmount, *, apply_to_future: bool = False, account_id: AccountId | None = None) -> bool`
 
 #### Boundary With Rules
 
-Rules may include a "link to goal" action. Goals owns the goal records and explicit transaction-goal links.
+Rules may include a "link to goal" action. Goals owns the goal records; Transactions owns explicit transaction-goal assignment.
+
+#### Backend Notes
+
+This group intentionally uses Monarch's current `SavingsGoal` surface only because that is what the webapp uses for the visible goal workflow, transaction linking, events, and monthly budget amounts. `GoalV2` endpoints exist in recon, but they are deferred because they do not match the current webapp behavior. Goal completion is not exposed until we verify the current SavingsGoal completion flow; `status` currently supports archive/restore through verified endpoints.
 
 ### Investments
 
@@ -386,6 +396,7 @@ TagId = str
 MerchantId = str
 RuleId = str
 GoalId = str
+GoalEventId = str
 RecurringId = str
 MemberId = str
 InstitutionId = str
@@ -1006,66 +1017,94 @@ class RecurringSummaryBucket:
 ### Goals Types
 
 ```python
-GoalType = Literal["save_up", "pay_down", "retirement", "custom"]
-GoalStatus = Literal["active", "archived", "completed"]
+class GoalType(str, Enum):
+    CUSTOM = "custom"
+    SAVINGS = "savings"
+    DEBT = "debt"
+    ASSET = "asset"
+    EMERGENCY_FUND = "emergency_fund"
+    HOME = "home"
+    RETIREMENT = "retirement"
+    EDUCATION = "education"
+    VEHICLE = "vehicle"
+    VACATION = "vacation"
+    LARGE_PURCHASE = "large_purchase"
 
-class GoalFilter:
-    statuses: list[GoalStatus] | None
-    types: list[GoalType] | None
-    account_ids: list[AccountId] | None
-    search: str | None
+class GoalStatus(str, Enum):
+    AHEAD = "ahead"
+    ARCHIVED = "archived"
+    AT_RISK = "at_risk"
+    COMPLETED = "completed"
+    INCOMPLETE = "incomplete"
+    ON_TRACK = "on_track"
+
+class GoalEventType(str, Enum):
+    CONTRIBUTION = "contribution"
+    MIGRATION = "migration"
+    PRICE_CHANGE = "price_change"
+    REBALANCE = "rebalance"
+    SPENDING = "spending"
+    TRANSACTION_ADJUSTMENT = "transaction_adjustment"
+    WITHDRAWAL = "withdrawal"
 
 class Goal:
     id: GoalId
     name: str
-    type: GoalType
-    status: GoalStatus
-    target_amount: MoneyAmount | None
-    current_amount: MoneyAmount
-    target_date: Date | None
-    monthly_contribution: MoneyAmount | None
-    priority: int | None
-    accounts: list[GoalAccountLink]
-    created_at: DateTime | None
-    updated_at: DateTime | None
-
-class GoalCreate:
-    name: str
-    type: GoalType
-    target_amount: MoneyAmount | None
-    target_date: Date | None
-    monthly_contribution: MoneyAmount | None
-    account_links: list[GoalAccountLinkInput] | None
-
-class GoalPatch:
-    name: str | None
-    target_amount: MoneyAmount | None
-    target_date: Date | None
-    monthly_contribution: MoneyAmount | None
+    type: GoalType | None
     status: GoalStatus | None
-
-class GoalAccountLink:
-    account: AccountReference
-    allocation_amount: MoneyAmount | None
-    allocation_percent: Decimal | None
-
-class GoalAccountLinkInput:
-    account_id: AccountId
-    allocation_amount: MoneyAmount | None
-    allocation_percent: Decimal | None
-
-class GoalProgress:
-    goal_id: GoalId
-    current_amount: MoneyAmount
     target_amount: MoneyAmount | None
-    remaining_amount: MoneyAmount | None
-    progress_percent: Decimal | None
-    projected_completion_date: Date | None
+    current_balance: MoneyAmount | None
+    target_date: Date | None
+    current_month_planned_contribution_amount: MoneyAmount | None
+    planned_monthly_contribution: MoneyAmount | None
+    progress: float | None
+    is_sinking_fund: bool | None
+    priority: int | None
+    allocation_summaries: list[GoalAllocationSummary]
+    account_balance_links: list[GoalAccountBalanceLink]
+    created_at: DateTime | None
+    archived_at: DateTime | None
+    completed_at: DateTime | None
+    estimated_months_until_completion: int | None
 
-class GoalTransactionLink:
+class GoalAllocationSummary:
     goal_id: GoalId
-    transaction_id: TransactionId
-    linked_at: DateTime
+    account: AccountReference | None
+    adjustment_amount: MoneyAmount | None
+    total_amount: MoneyAmount | None
+    spending_amount: MoneyAmount | None
+    contributions_amount: MoneyAmount | None
+    withdrawals_amount: MoneyAmount | None
+
+class GoalAccountBalanceLink:
+    id: str
+    account: AccountReference | None
+    amount: MoneyAmount | None
+    current_amount: MoneyAmount | None
+    use_entire_balance: bool | None
+
+class GoalEvent:
+    id: GoalEventId
+    date: DateTime
+    amount: MoneyAmount
+    type: GoalEventType | None
+    can_delete: bool | None
+    include_in_budget: bool | None
+    notes: str | None
+    account: AccountReference | None
+    goal: GoalReference | None
+    transaction: Transaction | None
+
+class GoalBudgetAmount:
+    id: str
+    month: Date
+    planned_amount: MoneyAmount | None
+    actual_amount: MoneyAmount | None
+    remaining_amount: MoneyAmount | None
+    total_planned_amount: MoneyAmount | None
+    total_actual_amount: MoneyAmount | None
+    total_remaining_amount: MoneyAmount | None
+    account_breakdown: list[JsonDict]
 ```
 
 ### Investments Types
