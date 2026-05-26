@@ -32,6 +32,15 @@ from monarch_api.functions.cashflow import (
     get_cashflow_trends,
 )
 from monarch_api.functions.common import build_auth_headers, graphql_request, rest_request
+from monarch_api.functions.household import (
+    get_current_user,
+    get_household,
+    get_household_member,
+    get_household_preferences,
+    list_household_members,
+    update_current_user,
+    update_household_preferences,
+)
 from monarch_api.functions.merchants import (
     delete_merchant,
     get_merchant,
@@ -98,6 +107,10 @@ __all__ = [
     "get_category",
     "get_category_catalog",
     "get_category_group",
+    "get_current_user",
+    "get_household",
+    "get_household_member",
+    "get_household_preferences",
     "get_merchant",
     "get_recurring_stream",
     "get_recurring_summary",
@@ -113,6 +126,7 @@ __all__ = [
     "list_accounts",
     "list_categories",
     "list_category_groups",
+    "list_household_members",
     "list_merchants",
     "list_recurring_occurrences",
     "list_recurring_streams",
@@ -132,6 +146,8 @@ __all__ = [
     "update_account",
     "update_category",
     "update_category_group",
+    "update_current_user",
+    "update_household_preferences",
     "update_merchant",
     "update_recurring_stream",
     "update_saved_report",

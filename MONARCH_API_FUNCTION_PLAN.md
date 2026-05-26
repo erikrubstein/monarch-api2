@@ -351,27 +351,25 @@ No archive, restore, merge, or tag-summary functions for now. The current recon 
 
 ### Household
 
-Household owns member records, invitations, shared household settings, subscription details, and user profile data relevant to the shared Monarch workspace.
+Household owns the shared Monarch workspace record, its active member records, the current user's profile, and core shared household preferences. Invitation management, subscription details, member removal, security settings, dashboard configuration, and advisor access are deferred.
 
 #### Core Functions
 
 - `get_household() -> Household`
 - `list_household_members() -> list[HouseholdMember]`
-- `get_household_member(member_id: MemberId) -> HouseholdMember`
-- `invite_household_member(email: str, role: HouseholdRole = "member") -> HouseholdInvite`
-- `list_household_invites() -> list[HouseholdInvite]`
-- `resend_household_invite(invite_id: InviteId) -> HouseholdInvite`
-- `revoke_household_invite(invite_id: InviteId) -> None`
-- `remove_household_member(member_id: MemberId) -> None`
+- `get_household_member(member_id: MemberId) -> HouseholdMember | None`
 - `get_current_user() -> UserProfile`
-- `update_current_user(patch: UserProfilePatch) -> UserProfile`
+- `update_current_user(*, display_name: str | None = None, timezone: str | None = None) -> UserProfile`
 - `get_household_preferences() -> HouseholdPreferences`
-- `update_household_preferences(patch: HouseholdPreferencesPatch) -> HouseholdPreferences`
-- `get_subscription_details() -> SubscriptionDetails`
+- `update_household_preferences(*, new_transactions_need_review: bool | None = None, uncategorized_transactions_need_review: bool | None = None, pending_transactions_can_be_edited: bool | None = None, hidden_transactions_beta_enabled: bool | None = None, exclude_business_from_budget: bool | None = None) -> HouseholdPreferences`
 
 #### Boundary With Accounts
 
 Members may own or contribute accounts, but account records and balances remain in Accounts.
+
+#### Deferred
+
+No invitations, subscription/billing, household deletion, member removal, MFA/security, notification preferences, profile-picture upload, dashboard configuration, or advisor access functions for now.
 
 ## Shared Data Types
 
@@ -1347,57 +1345,59 @@ class Tag:
 class Household:
     id: str
     name: str | None
-    members: list[HouseholdMember]
-    created_at: DateTime | None
+    address: str | None
+    city: str | None
+    state: str | None
+    zip_code: str | None
+    country: str | None
+    raw: JsonDict | None
 
 class HouseholdMember:
     id: MemberId
-    email: str
-    display_name: str
-    role: HouseholdRole
-    status: Literal["active", "invited", "removed"]
-    avatar_url: str | None
-    joined_at: DateTime | None
+    name: str | None
+    display_name: str | None
+    email: str | None
+    role: HouseholdRole | None
+    has_mfa_on: bool | None
+    profile_picture_url: str | None
+    raw: JsonDict | None
 
-HouseholdRole = Literal["manager", "member", "advisor"]
-
-class HouseholdInvite:
-    id: InviteId
-    email: str
-    role: HouseholdRole
-    status: Literal["pending", "accepted", "expired", "revoked"]
-    invited_at: DateTime
-    expires_at: DateTime | None
+HouseholdRole = Literal["owner", "manager", "member", "advisor"]
 
 class UserProfile:
     id: MemberId
-    email: str
-    display_name: str
-    avatar_url: str | None
-    timezone: str | None
-    notification_preferences: dict[str, object] | None
-
-class UserProfilePatch:
+    email: str | None
+    name: str | None
     display_name: str | None
     timezone: str | None
-    notification_preferences: dict[str, object] | None
+    household_role: HouseholdRole | None
+    has_password: bool | None
+    has_mfa_on: bool | None
+    is_superuser: bool | None
+    profile_picture_url: str | None
+    created_at: str | None
+    pending_email_update: str | None
+    raw: JsonDict | None
 
 class HouseholdPreferences:
-    transaction_review_settings: dict[str, object] | None
-    default_currency: str | None
-    hide_hidden_transactions_by_default: bool | None
-    shared_view_settings: dict[str, object] | None
-
-class HouseholdPreferencesPatch:
-    transaction_review_settings: dict[str, object] | None
-    hide_hidden_transactions_by_default: bool | None
-    shared_view_settings: dict[str, object] | None
-
-class SubscriptionDetails:
-    status: Literal["trial", "active", "past_due", "cancelled", "unknown"]
-    plan_name: str | None
-    renews_at: DateTime | None
-    trial_ends_at: DateTime | None
+    id: str
+    new_transactions_need_review: bool | None
+    uncategorized_transactions_need_review: bool | None
+    pending_transactions_can_be_edited: bool | None
+    account_group_order: list[str] | None
+    ai_assistant_enabled: bool | None
+    llm_enrichment_enabled: bool | None
+    investment_transactions_enabled: bool | None
+    budget_apply_to_future_months_default: bool | None
+    hidden_transactions_beta_enabled: bool | None
+    collaboration_tools_enabled: bool | None
+    agg_data_sharing_enabled: bool | None
+    ai_model_training_on_user_data_enabled: bool | None
+    exclude_business_from_budget: bool | None
+    continuous_financial_monitoring_enabled: bool | None
+    eligible_for_financial_insights: bool | None
+    budget_system: str | None
+    raw: JsonDict | None
 ```
 
 ### Lightweight Reference Types
@@ -1456,7 +1456,7 @@ class MemberReference:
 9. Goals CRUD and transaction links.
 10. Investments holdings, allocation, and performance.
 11. Reports and saved reports.
-12. Household members, invites, preferences, and subscription details.
+12. Household workspace, active members, current-user profile, and core preferences.
 
 ## Source Notes
 

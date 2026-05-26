@@ -28,6 +28,13 @@ from monarch_api.types.cashflow import (
     CashflowTrendPoint,
 )
 from monarch_api.types.common import User
+from monarch_api.types.household import (
+    Household,
+    HouseholdMember,
+    HouseholdPreferences,
+    HouseholdRole,
+    UserProfile,
+)
 from monarch_api.types.merchants import Merchant, MerchantSort
 from monarch_api.types.reports import (
     ReportGroup,
@@ -91,6 +98,10 @@ __all__ = [
     "CategoryReference",
     "CategoryType",
     "GoalReference",
+    "Household",
+    "HouseholdMember",
+    "HouseholdPreferences",
+    "HouseholdRole",
     "Institution",
     "Merchant",
     "MerchantReference",
@@ -125,4 +136,5 @@ __all__ = [
     "TransactionSort",
     "TransactionVisibility",
     "User",
+    "UserProfile",
 ]
