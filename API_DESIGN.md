@@ -23,7 +23,8 @@ Functions and types are organized by product group:
 - `functions/recurring.py`, `types/recurring.py`
 - `functions/household.py`, `types/household.py`
 - `functions/goals.py`, `types/goals.py`
-- future groups such as budget, receipts, investments, rules, etc.
+- `functions/investments.py`, `types/investments.py`
+- future groups such as budget, receipts, rules, etc.
 
 Each group owns the concepts that naturally belong to that page or workflow in Monarch. If functionality overlaps, prefer a single clear owner and let other groups reference that object by id or by a shared type.
 

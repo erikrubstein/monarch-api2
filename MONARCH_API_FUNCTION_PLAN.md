@@ -232,27 +232,31 @@ This group intentionally uses Monarch's current `SavingsGoal` surface only becau
 
 ### Investments
 
-Investments owns securities, holdings, allocation, performance, benchmarks, and manual holdings. Account balances remain owned by Accounts.
+Investments owns investment accounts, securities, holdings, portfolio performance, derived allocation rows, benchmarks returned with portfolio performance, and manual holdings. Account balances remain owned by Accounts.
 
 #### Core Functions
 
-- `get_portfolio_summary(filter: InvestmentFilter | None = None) -> PortfolioSummary`
-- `list_holdings(filter: HoldingFilter | None = None) -> list[Holding]`
-- `get_holding(holding_id: HoldingId) -> Holding`
-- `list_securities(search: str | None = None, symbols: list[str] | None = None) -> list[Security]`
-- `get_security(security_id: SecurityId | None = None, symbol: str | None = None) -> Security`
-- `get_asset_allocation(filter: InvestmentFilter | None = None, group_by: AllocationGroupBy = "asset_class") -> list[AssetAllocationRow]`
-- `get_investment_performance(filter: InvestmentPerformanceFilter) -> InvestmentPerformanceSeries`
-- `get_benchmark_performance(symbols: list[str], date_range: DateRange) -> list[BenchmarkSeries]`
-- `create_manual_holding(input: ManualHoldingCreate) -> Holding`
-- `update_manual_holding(holding_id: HoldingId, patch: ManualHoldingPatch) -> Holding`
-- `delete_manual_holding(holding_id: HoldingId) -> None`
+- `list_investment_accounts() -> list[InvestmentAccount]`
+- `get_portfolio(*, account_ids: list[AccountId] | None = None, start_date: Date | None = None, end_date: Date | None = None, include_hidden_holdings: bool | None = None, top_movers_limit: int | None = None) -> Portfolio`
+- `list_holdings(*, account_ids: list[AccountId] | None = None, include_hidden_holdings: bool | None = None) -> list[Holding]`
+- `get_holding(holding_id: HoldingId) -> Holding | None`
+- `search_securities(query: str, *, limit: int = 20, order_by_popularity: bool = True) -> list[Security]`
+- `get_security(security_id: SecurityId) -> Security | None`
+- `get_holding_performance(holding_id: HoldingId, *, start_date: Date | None = None, end_date: Date | None = None) -> InvestmentPerformance | None`
+- `create_manual_holding(*, account_id: AccountId, security_id: SecurityId, quantity: float, cost_basis: MoneyAmount | None = None) -> Holding`
+- `update_manual_holding(holding_id: HoldingId, *, quantity: float | None = None, cost_basis: MoneyAmount | None = None, security_type: str | None = None) -> Holding`
+- `delete_manual_holding(holding_id: HoldingId) -> bool`
 
 #### Boundary With Accounts And Transactions
 
 - Use Accounts for investment account metadata and balances.
 - Use Transactions for investment transaction rows when Monarch Labs investment transactions are enabled.
 - Use Investments for positions, securities, allocation, and performance.
+- Credit score, vehicles, business entities, equity grants, and Spinwheel flows are intentionally separate from this group even though recon groups many of those endpoints near investments.
+
+#### Backend Notes
+
+Portfolio allocation rows are derived client-side from holding/security classification fields returned by Monarch, not from a dedicated allocation endpoint. `createManualHolding` only accepts account, security, and quantity; if `cost_basis` is provided, the public helper creates the holding and then applies `userCostBasis` through `updateHolding`.
 
 ### Categories
 
@@ -1112,86 +1116,77 @@ class GoalBudgetAmount:
 ```python
 class Security:
     id: SecurityId
-    symbol: str | None
     name: str
-    type: Literal["stock", "etf", "mutual_fund", "fixed_income", "crypto", "cash", "option", "other"]
-    exchange: str | None
-    currency: str | None
-    latest_price: MoneyAmount | None
-    latest_price_at: DateTime | None
+    ticker: str | None
+    type: str | None
+    type_display: str | None
+    current_price: MoneyAmount | None
+    closing_price: MoneyAmount | None
+    one_day_change_dollars: MoneyAmount | None
+    one_day_change_percent: float | None
 
 class Holding:
     id: HoldingId
-    account: AccountReference
-    security: Security
-    quantity: Decimal
-    price: MoneyAmount | None
-    market_value: MoneyAmount
+    name: str
+    ticker: str | None
+    account: AccountReference | None
+    security: Security | None
+    aggregate_id: str | None
+    quantity: float | None
+    value: MoneyAmount | None
     cost_basis: MoneyAmount | None
-    day_change_amount: MoneyAmount | None
-    day_change_percent: Decimal | None
-    total_return_amount: MoneyAmount | None
-    total_return_percent: Decimal | None
-    is_manual: bool
-    updated_at: DateTime | None
+    user_cost_basis: MoneyAmount | None
+    is_manual: bool | None
+    tax_lots: list[HoldingTaxLot]
 
-class HoldingFilter:
-    account_ids: list[AccountId] | None
-    security_ids: list[SecurityId] | None
-    symbols: list[str] | None
-    asset_types: list[str] | None
-    manual_only: bool | None
-
-class InvestmentFilter:
-    account_ids: list[AccountId] | None
-    security_ids: list[SecurityId] | None
-    asset_types: list[str] | None
-
-AllocationGroupBy = Literal["asset_class", "account", "security", "sector"]
+class InvestmentAccount:
+    id: AccountId
+    display_name: str
+    is_taxable: bool | None
+    include_in_net_worth: bool | None
+    sync_disabled: bool | None
+    subtype_display: str | None
 
 class PortfolioSummary:
-    total_value: MoneyAmount
-    day_change_amount: MoneyAmount | None
-    day_change_percent: Decimal | None
-    total_return_amount: MoneyAmount | None
-    total_return_percent: Decimal | None
-    holdings_count: int
+    total_value: MoneyAmount | None
+    total_change_dollars: MoneyAmount | None
+    total_change_percent: float | None
+    one_day_change_dollars: MoneyAmount | None
+    one_day_change_percent: float | None
+    holdings_count: int | None
+    top_movers: list[Security]
 
-class AssetAllocationRow:
+class PortfolioAllocation:
     key: str
     label: str
-    market_value: MoneyAmount
-    percent_of_portfolio: Decimal
+    value: MoneyAmount
+    percent_of_portfolio: float
 
-class InvestmentPerformanceFilter:
-    date_range: DateRange
-    account_ids: list[AccountId] | None
-    security_ids: list[SecurityId] | None
-    benchmark_symbols: list[str] | None
-
-class InvestmentPerformanceSeries:
-    portfolio: list[InvestmentPerformancePoint]
+class Portfolio:
+    summary: PortfolioSummary
+    holdings: list[Holding]
+    allocations: list[PortfolioAllocation]
+    performance: list[InvestmentPerformancePoint]
     benchmarks: list[BenchmarkSeries]
+
+class InvestmentPerformance:
+    security: Security | None
+    points: list[InvestmentPerformancePoint]
 
 class InvestmentPerformancePoint:
     date: Date
     value: MoneyAmount
-    return_percent: Decimal | None
+    return_percent: float | None
 
 class BenchmarkSeries:
-    symbol: str
+    security: Security | None
     points: list[InvestmentPerformancePoint]
 
-class ManualHoldingCreate:
-    account_id: AccountId
-    security_id: SecurityId | None
-    symbol: str | None
-    quantity: Decimal
-    cost_basis: MoneyAmount | None
-
-class ManualHoldingPatch:
-    quantity: Decimal | None
-    cost_basis: MoneyAmount | None
+class HoldingTaxLot:
+    id: str
+    acquisition_date: Date | None
+    acquisition_quantity: float | None
+    cost_basis_per_unit: MoneyAmount | None
 ```
 
 ### Categories Types
