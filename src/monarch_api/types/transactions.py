@@ -132,6 +132,31 @@ class GoalReference:
 
 
 @dataclass(slots=True)
+class TransactionAttachment:
+    id: str
+    public_id: str | None = None
+    extension: str | None = None
+    size_bytes: int | None = None
+    filename: str | None = None
+    original_asset_url: str | None = None
+    raw: JsonDict | None = None
+
+    @classmethod
+    def from_api(cls, data: JsonDict | None) -> TransactionAttachment | None:
+        if not data:
+            return None
+        return cls(
+            id=str(data["id"]),
+            public_id=data.get("publicId"),
+            extension=data.get("extension"),
+            size_bytes=_int_or_none(data.get("sizeBytes")),
+            filename=data.get("filename"),
+            original_asset_url=data.get("originalAssetUrl"),
+            raw=dict(data),
+        )
+
+
+@dataclass(slots=True)
 class Transaction:
     id: str
     date: str
@@ -157,6 +182,7 @@ class Transaction:
     recurring_id: str | None = None
     goal: GoalReference | None = None
     original_transaction_id: str | None = None
+    attachments: list[TransactionAttachment] = field(default_factory=list)
     attachment_count: int = 0
     owner: User | None = None
     is_manual: bool | None = None
@@ -173,6 +199,14 @@ class Transaction:
             tag
             for tag in (TagReference.from_api(tag) for tag in data.get("tags") or [])
             if tag is not None
+        ]
+        attachments = [
+            attachment
+            for attachment in (
+                TransactionAttachment.from_api(attachment)
+                for attachment in data.get("attachments") or []
+            )
+            if attachment is not None
         ]
         return cls(
             id=str(data["id"]),
@@ -199,7 +233,8 @@ class Transaction:
             recurring_id=merchant.recurring_id if merchant is not None else None,
             goal=_goal_reference(data),
             original_transaction_id=_nested_id(data.get("originalTransaction")),
-            attachment_count=_attachment_count(data.get("attachments")),
+            attachments=attachments,
+            attachment_count=len(attachments),
             owner=User.from_api(data.get("ownedByUser")),
             is_manual=data.get("isManual"),
             synced_from_institution=data.get("syncedFromInstitution"),
@@ -383,12 +418,6 @@ class TransactionFilter:
         )
 
 
-def _attachment_count(value: object) -> int:
-    if not isinstance(value, list):
-        return 0
-    return len(value)
-
-
 def _clean(data: JsonDict) -> JsonDict:
     return {key: value for key, value in data.items() if value is not None}
 
@@ -398,6 +427,14 @@ def _first_present(data: JsonDict, *keys: str) -> int | None:
         value = data.get(key)
         if isinstance(value, int):
             return value
+    return None
+
+
+def _int_or_none(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
     return None
 
 

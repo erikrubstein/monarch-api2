@@ -130,6 +130,13 @@ def print_transaction(transaction) -> None:
     print(f"Has splits: {format_bool(transaction.has_splits)}")
     print(f"Is split row: {format_bool(transaction.is_split)}")
     print(f"Attachment count: {transaction.attachment_count}")
+    for attachment in transaction.attachments:
+        print(
+            "  "
+            f"{attachment.id} "
+            f"{attachment.filename or ''} "
+            f"{format_size(attachment.size_bytes)}"
+        )
     print(f"Owner: {transaction.owner.display_name if transaction.owner else ''}")
     print(f"Updated at: {transaction.updated_at or ''}")
 
@@ -167,6 +174,12 @@ def format_bool(value: bool | None) -> str:
     if value is None:
         return ""
     return "yes" if value else "no"
+
+
+def format_size(value: int | None) -> str:
+    if value is None:
+        return ""
+    return f"{value:,} bytes"
 
 
 def clip(value: str, width: int) -> str:

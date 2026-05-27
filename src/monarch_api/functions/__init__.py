@@ -124,13 +124,18 @@ from monarch_api.functions.tags import (
 )
 from monarch_api.functions.transactions import (
     create_transaction,
+    delete_transaction_attachment,
     delete_transaction,
+    download_transaction_attachment,
+    get_transaction_attachment,
     get_transaction,
     get_transaction_splits,
+    list_transaction_attachments,
     list_transactions,
     unsplit_transaction,
     update_transaction,
     update_transaction_splits,
+    upload_transaction_attachment,
 )
 
 __all__ = [
@@ -158,6 +163,8 @@ __all__ = [
     "delete_saved_report",
     "delete_tag",
     "delete_transaction",
+    "delete_transaction_attachment",
+    "download_transaction_attachment",
     "get_account",
     "get_account_history",
     "get_budget",
@@ -187,6 +194,7 @@ __all__ = [
     "get_saved_report",
     "get_security",
     "get_transaction",
+    "get_transaction_attachment",
     "get_transaction_splits",
     "get_historical_balances",
     "get_net_worth_breakdown",
@@ -206,6 +214,7 @@ __all__ = [
     "list_recurring_streams",
     "list_saved_reports",
     "list_tags",
+    "list_transaction_attachments",
     "list_transactions",
     "load_session",
     "link_goal_account_balance",
@@ -247,5 +256,6 @@ __all__ = [
     "update_tag",
     "update_transaction",
     "update_transaction_splits",
+    "upload_transaction_attachment",
     "withdraw_from_goal",
 ]

@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+import mimetypes
+from pathlib import Path
+
+import httpx
 
 from monarch_api.functions.common import MonarchError, graphql_request
 from monarch_api.types.auth import AuthSession
 from monarch_api.types.common import JsonDict
 from monarch_api.types.transactions import (
     Transaction,
+    TransactionAttachment,
     TransactionFilter,
     TransactionPage,
     TransactionReviewStatus,
@@ -22,6 +27,17 @@ fragment TransactionUserFields on User {
   id
   displayName
   profilePictureUrl
+}
+"""
+
+TRANSACTION_ATTACHMENT_FIELDS = """
+fragment TransactionAttachmentFields on TransactionAttachment {
+  id
+  publicId
+  extension
+  sizeBytes
+  filename
+  originalAssetUrl
 }
 """
 
@@ -48,7 +64,7 @@ fragment TransactionFields on Transaction {
   deletedAt
   updatedAt
   attachments {
-    id
+    ...TransactionAttachmentFields
   }
   goal {
     id
@@ -107,6 +123,7 @@ fragment TransactionFields on Transaction {
 }
 """
     + TRANSACTION_USER_FIELDS
+    + TRANSACTION_ATTACHMENT_FIELDS
 )
 
 TRANSACTION_SPLIT_FIELDS = (
@@ -277,6 +294,61 @@ mutation Common_DeleteTransactionMutation($input: DeleteTransactionMutationInput
       message
       code
     }
+  }
+}
+"""
+
+GET_TRANSACTION_ATTACHMENT_QUERY = (
+    """
+query Mobile_GetAttachmentDetails($attachmentId: UUID!) {
+  transactionAttachment(id: $attachmentId) {
+    ...TransactionAttachmentFields
+  }
+}
+"""
+    + TRANSACTION_ATTACHMENT_FIELDS
+)
+
+GET_TRANSACTION_ATTACHMENT_UPLOAD_INFO_MUTATION = """
+mutation Common_GetTransactionAttachmentUploadInfo($transactionId: UUID!) {
+  getTransactionAttachmentUploadInfo(transactionId: $transactionId) {
+    info {
+      path
+      requestParams {
+        timestamp
+        folder
+        signature
+        api_key
+        upload_preset
+      }
+    }
+  }
+}
+"""
+
+ADD_TRANSACTION_ATTACHMENT_MUTATION = (
+    """
+mutation Common_AddTransactionAttachment(
+  $input: TransactionAddAttachmentMutationInput!
+) {
+  addTransactionAttachment(input: $input) {
+    attachment {
+      ...TransactionAttachmentFields
+    }
+    errors {
+      message
+      code
+    }
+  }
+}
+"""
+    + TRANSACTION_ATTACHMENT_FIELDS
+)
+
+DELETE_TRANSACTION_ATTACHMENT_MUTATION = """
+mutation Web_TransactionDrawerDeleteAttachment($id: UUID!) {
+  deleteTransactionAttachment(id: $id) {
+    deleted
   }
 }
 """
@@ -587,6 +659,125 @@ def delete_transaction(
     return bool(payload.get("deleted"))
 
 
+def list_transaction_attachments(
+    session: AuthSession,
+    transaction_id: str,
+    *,
+    redirect_posted: bool = True,
+) -> list[TransactionAttachment]:
+    transaction = get_transaction(
+        session,
+        transaction_id,
+        redirect_posted=redirect_posted,
+    )
+    if transaction is None:
+        raise MonarchError("Transaction not found.")
+    return transaction.attachments
+
+
+def get_transaction_attachment(
+    session: AuthSession,
+    attachment_id: str,
+) -> TransactionAttachment | None:
+    data = graphql_request(
+        session,
+        "Mobile_GetAttachmentDetails",
+        GET_TRANSACTION_ATTACHMENT_QUERY,
+        {"attachmentId": attachment_id},
+    )
+    attachment = data.get("transactionAttachment")
+    if not isinstance(attachment, dict):
+        return None
+    return TransactionAttachment.from_api(attachment)
+
+
+def upload_transaction_attachment(
+    session: AuthSession,
+    transaction_id: str,
+    file_path: str | Path,
+    *,
+    filename: str | None = None,
+    content_type: str | None = None,
+) -> TransactionAttachment:
+    path = Path(file_path)
+    if not path.is_file():
+        raise FileNotFoundError(path)
+
+    upload_info = _get_attachment_upload_info(session, transaction_id)
+    upload_result = _upload_attachment_file(
+        upload_info,
+        path,
+        filename=filename,
+        content_type=content_type,
+    )
+    public_id = upload_result.get("public_id")
+    if not public_id:
+        raise MonarchError("Cloudinary upload did not return a public id.")
+
+    upload_filename = filename or path.name
+    data = graphql_request(
+        session,
+        "Common_AddTransactionAttachment",
+        ADD_TRANSACTION_ATTACHMENT_MUTATION,
+        {
+            "input": {
+                "transactionId": transaction_id,
+                "filename": Path(upload_filename).stem,
+                "publicId": str(public_id),
+                "extension": Path(upload_filename).suffix.lstrip("."),
+                "sizeBytes": path.stat().st_size,
+            }
+        },
+    )
+    payload = _payload(data, "addTransactionAttachment")
+    _raise_payload_errors(payload)
+    attachment = TransactionAttachment.from_api(payload.get("attachment"))
+    if attachment is None:
+        raise MonarchError("Monarch did not return the uploaded attachment.")
+    return attachment
+
+
+def download_transaction_attachment(
+    session: AuthSession,
+    attachment_id: str,
+    path: str | Path | None = None,
+) -> bytes:
+    attachment = get_transaction_attachment(session, attachment_id)
+    if attachment is None:
+        raise MonarchError("Transaction attachment not found.")
+    if not attachment.original_asset_url:
+        raise MonarchError("Transaction attachment did not include a download URL.")
+
+    try:
+        response = httpx.get(attachment.original_asset_url, timeout=60.0)
+        response.raise_for_status()
+    except httpx.HTTPError as error:
+        raise MonarchError(f"Failed to download transaction attachment: {error}") from error
+
+    content = response.content
+    if path is not None:
+        download_path = Path(path)
+        if download_path.exists() and download_path.is_dir():
+            download_path = download_path / _attachment_filename(attachment)
+        download_path.parent.mkdir(parents=True, exist_ok=True)
+        download_path.write_bytes(content)
+    return content
+
+
+def delete_transaction_attachment(
+    session: AuthSession,
+    attachment_id: str,
+) -> bool:
+    data = graphql_request(
+        session,
+        "Web_TransactionDrawerDeleteAttachment",
+        DELETE_TRANSACTION_ATTACHMENT_MUTATION,
+        {"id": attachment_id},
+    )
+    payload = _payload(data, "deleteTransactionAttachment")
+    return bool(payload.get("deleted"))
+
+
 def _update_transaction_splits(
     session: AuthSession,
     transaction_id: str,
@@ -673,6 +864,79 @@ def _split_details_from_transaction(data: JsonDict) -> TransactionSplitDetails:
 
 def _clean(data: JsonDict) -> JsonDict:
     return {key: value for key, value in data.items() if value is not None}
+
+
+def _get_attachment_upload_info(
+    session: AuthSession,
+    transaction_id: str,
+) -> JsonDict:
+    data = graphql_request(
+        session,
+        "Common_GetTransactionAttachmentUploadInfo",
+        GET_TRANSACTION_ATTACHMENT_UPLOAD_INFO_MUTATION,
+        {"transactionId": transaction_id},
+    )
+    payload = _payload(data, "getTransactionAttachmentUploadInfo")
+    info = payload.get("info")
+    if not isinstance(info, dict):
+        raise MonarchError("Monarch did not return attachment upload info.")
+    return info
+
+
+def _upload_attachment_file(
+    upload_info: JsonDict,
+    path: Path,
+    *,
+    filename: str | None,
+    content_type: str | None,
+) -> JsonDict:
+    upload_path = upload_info.get("path")
+    request_params = upload_info.get("requestParams")
+    if not isinstance(upload_path, str) or not isinstance(request_params, dict):
+        raise MonarchError("Monarch returned invalid attachment upload info.")
+
+    upload_filename = filename or path.name
+    guessed_content_type = mimetypes.guess_type(upload_filename)[0]
+    form_data = {
+        key: str(value)
+        for key, value in request_params.items()
+        if key != "__typename" and value is not None
+    }
+    files = {
+        "file": (
+            upload_filename,
+            path.read_bytes(),
+            content_type or guessed_content_type or "application/octet-stream",
+        )
+    }
+    url = _cloudinary_upload_url(upload_path)
+    try:
+        response = httpx.post(url, data=form_data, files=files, timeout=60.0)
+    except httpx.HTTPError as error:
+        raise MonarchError(f"Failed to upload transaction attachment: {error}") from error
+    data = response.json()
+    if response.status_code >= 400:
+        message = data.get("error") if isinstance(data, dict) else None
+        if isinstance(message, dict):
+            raise MonarchError(str(message.get("message") or message))
+        raise MonarchError("Failed to upload transaction attachment.")
+    if not isinstance(data, dict):
+        raise MonarchError("Cloudinary upload response was not a JSON object.")
+    return data
+
+
+def _cloudinary_upload_url(path: str) -> str:
+    if path.startswith("http://") or path.startswith("https://"):
+        return path
+    return f"https://api.cloudinary.com{path}"
+
+
+def _attachment_filename(attachment: TransactionAttachment) -> str:
+    filename = attachment.filename or attachment.id
+    extension = attachment.extension
+    if extension and not filename.endswith(f".{extension}"):
+        return f"{filename}.{extension}"
+    return filename
 
 
 def _payload(data: JsonDict, key: str) -> JsonDict:

@@ -80,13 +80,18 @@ Transactions owns transaction search, detail, edits, manual transactions, deleti
 - `create_transaction(*, account_id: AccountId, amount: MoneyAmount, date: Date, merchant_name: str, category_id: CategoryId, notes: str | None = None, owner_user_id: UserId | None = None, should_update_balance: bool | None = None, goal_id: GoalId | None = None) -> Transaction`
 - `update_transaction(transaction_id: TransactionId, *, date: Date | None = None, amount: MoneyAmount | None = None, account_id: AccountId | None = None, merchant_name: str | None = None, category_id: CategoryId | None = None, notes: str | None = None, hide_from_reports: bool | None = None, review_status: TransactionReviewStatus | None = None, needs_review_by_user_id: UserId | None = None, owner_user_id: UserId | None = None, tag_ids: list[TagId] | None = None, goal_id: GoalId | None = None, clear_goal: bool = False) -> Transaction`
 - `delete_transaction(transaction_id: TransactionId) -> bool`
+- `list_transaction_attachments(transaction_id: TransactionId, *, redirect_posted: bool = True) -> list[TransactionAttachment]`
+- `get_transaction_attachment(attachment_id: str) -> TransactionAttachment | None`
+- `upload_transaction_attachment(transaction_id: TransactionId, file_path: str | Path, *, filename: str | None = None, content_type: str | None = None) -> TransactionAttachment`
+- `download_transaction_attachment(attachment_id: str, path: str | Path | None = None) -> bytes`
+- `delete_transaction_attachment(attachment_id: str) -> bool`
 - `get_transaction_splits(transaction_id: TransactionId) -> TransactionSplitDetails | None`
 - `update_transaction_splits(transaction_id: TransactionId, splits: list[TransactionSplitDraft]) -> TransactionSplitDetails`
 - `unsplit_transaction(transaction_id: TransactionId) -> TransactionSplitDetails`
 
 #### Build Phases
 
-Start with read and single-transaction workflows: list, detail, create manual transaction, update, delete, tag assignment through `update_transaction`, and full-set split editing. Bulk update/delete and multi-selection are intentionally out of scope for now because those operations can affect several transaction records.
+Start with read and single-transaction workflows: list, detail, create manual transaction, update, delete, tag assignment through `update_transaction`, attachment management, and full-set split editing. Bulk update/delete and multi-selection are intentionally out of scope for now because those operations can affect several transaction records.
 
 Transaction amounts follow Monarch's signed amount convention. Negative amounts are debits and positive amounts are credits.
 
@@ -102,7 +107,7 @@ Savings-goal transaction assignment uses Monarch's `Common_LinkTransactionToGoal
 - Rule creation from a transaction edit belongs in Rules.
 - Cashflow totals, chart aggregates, and transaction summary cards belong in Cashflow or Reports.
 - Explicit transaction-goal assignment belongs in Transactions because callers set it while creating or editing transactions. Goals owns savings-goal records, events, budget amounts, and account balance links.
-- Receipt upload, retail sync, and attachment upload flows are deferred until after core transaction editing. The backend supports them, but they cross into file/upload handling and retail-order matching.
+- Retail sync belongs in Receipts. Generic transaction attachment upload/download/delete belongs here because it is attached directly to a transaction and powers `Transaction.attachments`.
 
 ### Cashflow
 
@@ -597,6 +602,7 @@ class Transaction:
     recurring_id: str | None
     goal: GoalReference | None
     original_transaction_id: str | None
+    attachments: list[TransactionAttachment]
     attachment_count: int
     owner: User | None
     is_manual: bool | None
@@ -604,6 +610,15 @@ class Transaction:
     imported_from_mint: bool | None
     deleted_at: DateTime | None
     updated_at: DateTime | None
+    raw: JsonDict | None
+
+class TransactionAttachment:
+    id: str
+    public_id: str | None
+    extension: str | None
+    size_bytes: int | None
+    filename: str | None
+    original_asset_url: str | None
     raw: JsonDict | None
 
 class TransactionFilter:
