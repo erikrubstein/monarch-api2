@@ -151,26 +151,46 @@ Reports should not return full transaction pages directly for drilldowns. Caller
 
 ### Budget
 
-Budget owns monthly budget plans, budget rows, rollover behavior, flex/category budget settings, and moving planned amounts between categories.
+Budget owns monthly budget plans, category/group budget rows, fixed-and-flex budget rows, and budget settings that determine how Monarch presents the budget page.
 
 #### Core Functions
 
-- `get_budget(month: YearMonth, mode: BudgetMode | None = None) -> BudgetMonth`
-- `list_budget_months(start_month: YearMonth, end_month: YearMonth) -> list[BudgetMonthSummary]`
-- `get_budget_summary(month: YearMonth) -> BudgetSummary`
-- `get_budget_category(month: YearMonth, category_id: CategoryId) -> BudgetCategoryRow`
-- `set_budget_amount(month: YearMonth, category_id: CategoryId, amount: MoneyAmount) -> BudgetCategoryRow`
-- `set_budget_amounts(month: YearMonth, amounts: list[BudgetAmountInput]) -> list[BudgetCategoryRow]`
-- `set_budget_rollover(category_id: CategoryId, settings: RolloverSettings) -> BudgetCategoryRow`
-- `move_budget_money(input: BudgetMoveInput) -> BudgetMove`
-- `copy_budget_month(source_month: YearMonth, target_month: YearMonth, options: BudgetCopyOptions | None = None) -> BudgetMonth`
-- `reset_budget_month(month: YearMonth, scope: BudgetResetScope = "planned_amounts") -> BudgetMonth`
+- `get_budget(month: YearMonth) -> Budget`
+- `list_budget_months(start_month: YearMonth, end_month: YearMonth) -> list[Budget]`
 - `get_budget_settings() -> BudgetSettings`
-- `update_budget_settings(patch: BudgetSettingsPatch) -> BudgetSettings`
+- `get_budget_category(month: YearMonth, category_id: CategoryId) -> BudgetCategoryRow | None`
+- `get_flex_rollover_settings() -> FlexRolloverSettings`
+- `set_budget_amount(month: YearMonth, category_id: CategoryId, amount: MoneyAmount, apply_to_future: bool = False) -> BudgetCategoryRow`
+- `set_budget_group_amount(month: YearMonth, category_group_id: CategoryGroupId, amount: MoneyAmount, apply_to_future: bool = False) -> BudgetGroupRow`
+- `set_flex_budget_amount(month: YearMonth, amount: MoneyAmount, apply_to_future: bool = False) -> BudgetFlexRow`
+- `set_budget_category_variability(category_id: CategoryId, variability: BudgetVariability) -> BudgetCategory`
+- `set_budget_group_variability(category_group_id: CategoryGroupId, variability: BudgetVariability) -> BudgetCategoryGroup`
+- `set_budget_category_rollover(category_id: CategoryId, *, enabled: bool, start_month: YearMonth | None = None, starting_balance: MoneyAmount | None = None, frequency: BudgetRolloverFrequency | None = None, target_amount: MoneyAmount | None = None, rollover_type: BudgetRolloverType | None = None, apply_to_future: bool | None = None) -> BudgetCategory`
+- `set_budget_group_rollover(category_group_id: CategoryGroupId, *, enabled: bool, start_month: YearMonth | None = None, starting_balance: MoneyAmount | None = None, rollover_type: BudgetRolloverType | None = None) -> BudgetCategoryGroup`
+- `set_flex_rollover_settings(enabled: bool, start_month: YearMonth | None = None, starting_balance: MoneyAmount | None = None) -> FlexRolloverSettings`
+- `reset_budget_rollover(month: YearMonth, *, category_id: CategoryId | None = None, category_group_id: CategoryGroupId | None = None, starting_balance: MoneyAmount | None = None) -> Budget`
+- `create_budget(month: YearMonth) -> Budget`
+- `reset_budget(month: YearMonth, *, category_ids: list[CategoryId] | None = None, category_type: CategoryType | None = None, budget_variability: BudgetVariability | None = None, overwrite_existing: bool = False) -> Budget`
+- `clear_budget(month: YearMonth, confirm: bool = False) -> Budget`
+
+#### Deferred Functions
+
+- Bulk budget amount updates. The backend writes one category/group/flex row at a time, so a batch helper should wait until there is a strong workflow need.
+- Moving budget money between rows. The backend has a `moveMoneyBetweenCategories` mutation, but it is separate from the reset/copy/clear/init path and needs its own focused confirmation.
+- Copying a budget month. Monarch does not appear to expose a dedicated copy-month mutation, so this is intentionally not exposed as a Budget function.
+- Initializing flex budget rows. Monarch exposes `initializeFlexBudget`, but there is no clear inverse/delete operation, so the public API uses `set_flex_budget_amount()` instead.
 
 #### Boundary With Goals
 
-Budget may show goal contributions or goal-related rows, but creating goals, assigning accounts to goals, and linking transactions to goals belongs in Goals.
+Budget may show goal contributions or goal-related rows, but creating goals, assigning accounts to goals, goal monthly contributions, and linking transactions to goals belongs in Goals.
+
+#### Build Notes
+
+Monarch currently exposes two budget systems: `groups_and_categories` and `fixed_and_flex`. Both systems use the same budget data query for monthly category rows, group rows, and totals. `fixed_and_flex` adds a top-level flexible-expense budget row returned as `monthlyAmountsForFlexExpense`.
+
+Monarch's `resetBudget` mutation behaves more like a recalculation/fill operation than a destructive clear. The public `reset_budget()` wrapper keeps `overwrite_existing=False` by default. `clear_budget()` maps to the broader `clearBudget` mutation, should be treated as destructive, and requires `confirm=True`.
+
+Copying budget months is intentionally omitted because Monarch does not appear to expose a dedicated copy-month mutation.
 
 ### Recurring
 
@@ -839,99 +859,116 @@ class SavedReport:
 ### Budget Types
 
 ```python
-BudgetMode = Literal["category", "flex"]
+class BudgetSystem(str, Enum):
+    GROUPS_AND_CATEGORIES = "groups_and_categories"
+    FIXED_AND_FLEX = "fixed_and_flex"
 
-class BudgetMonth:
-    month: YearMonth
-    mode: BudgetMode
-    summary: BudgetSummary
-    groups: list[BudgetGroupRow]
+class BudgetVariability(str, Enum):
+    FIXED = "fixed"
+    FLEXIBLE = "flexible"
+    NON_MONTHLY = "non_monthly"
 
-class BudgetMonthSummary:
-    month: YearMonth
-    planned_income: MoneyAmount
-    actual_income: MoneyAmount
-    planned_expenses: MoneyAmount
-    actual_expenses: MoneyAmount
-    remaining: MoneyAmount
+class BudgetRolloverFrequency(str, Enum):
+    MONTHLY = "monthly"
+    VARIABLE = "variable"
+    EVERY_2_MONTHS = "every_2_months"
+    # ...through EVERY_12_MONTHS
 
-class BudgetSummary:
+class BudgetRolloverType(str, Enum):
+    MONTHLY = "monthly"
+    NON_MONTHLY = "non_monthly"
+    ONE_TIME = "one_time"
+
+class BudgetStatus:
+    has_budget: bool
+    has_transactions: bool
+    will_create_budget_from_empty_default_categories: bool
+
+class BudgetAmount:
     month: YearMonth
-    planned_income: MoneyAmount
-    actual_income: MoneyAmount
-    planned_expenses: MoneyAmount
-    actual_expenses: MoneyAmount
-    planned_savings: MoneyAmount
-    actual_savings: MoneyAmount
-    remaining_to_budget: MoneyAmount
+    planned_amount: MoneyAmount | None
+    planned_cash_flow_amount: MoneyAmount | None
+    planned_set_aside_amount: MoneyAmount | None
+    actual_amount: MoneyAmount | None
+    remaining_amount: MoneyAmount | None
+    previous_month_rollover_amount: MoneyAmount | None
+    rollover_type: str | None
+    cumulative_actual_amount: MoneyAmount | None
+    rollover_target_amount: MoneyAmount | None
+
+class BudgetTotals:
+    planned_amount: MoneyAmount | None
+    actual_amount: MoneyAmount | None
+    remaining_amount: MoneyAmount | None
+    previous_month_rollover_amount: MoneyAmount | None
+
+class BudgetMonthTotals:
+    month: YearMonth
+    income: BudgetTotals | None
+    expenses: BudgetTotals | None
+    fixed_expenses: BudgetTotals | None
+    non_monthly_expenses: BudgetTotals | None
+    flexible_expenses: BudgetTotals | None
+
+class BudgetRolloverPeriod:
+    id: str
+    start_month: YearMonth
+    end_month: YearMonth | None
+    starting_balance: MoneyAmount | None
+    target_amount: MoneyAmount | None
+    frequency: str | None
+    type: str | None
+
+class BudgetCategory:
+    id: CategoryId
+    name: str | None
+    icon: str | None
+    type: CategoryType | None
+    group_id: CategoryGroupId | None
+    budget_variability: BudgetVariability | None
+    exclude_from_budget: bool | None
+    rollover_period: BudgetRolloverPeriod | None
+
+class BudgetCategoryGroup:
+    id: CategoryGroupId
+    name: str | None
+    type: CategoryType | None
+    budget_variability: BudgetVariability | None
+    group_level_budgeting_enabled: bool | None
+    rollover_period: BudgetRolloverPeriod | None
 
 class BudgetGroupRow:
-    group: CategoryGroupReference
-    planned: MoneyAmount
-    actual: MoneyAmount
-    remaining: MoneyAmount
+    group: BudgetCategoryGroup
+    amounts: list[BudgetAmount]
     categories: list[BudgetCategoryRow]
 
 class BudgetCategoryRow:
-    category: CategoryReference
-    planned: MoneyAmount
-    actual: MoneyAmount
-    remaining: MoneyAmount
-    rollover: RolloverState | None
-    goal_id: GoalId | None
+    category: BudgetCategory
+    amounts: list[BudgetAmount]
 
-class BudgetAmountInput:
-    category_id: CategoryId
-    amount: MoneyAmount
-
-class RolloverSettings:
-    enabled: bool
-    type: Literal["monthly", "annual", "custom"] | None
-    start_month: YearMonth | None
-    starting_balance: MoneyAmount | None
-
-class RolloverState:
-    enabled: bool
-    balance: MoneyAmount
-    carried_from_prior_month: MoneyAmount
-
-class BudgetMoveInput:
-    month: YearMonth
-    from_category_id: CategoryId | None
-    to_category_id: CategoryId
-    amount: MoneyAmount
-    note: str | None
-
-class BudgetMove:
-    id: str
-    month: YearMonth
-    from_category_id: CategoryId | None
-    to_category_id: CategoryId
-    amount: MoneyAmount
-    created_at: DateTime
-
-BudgetResetScope = Literal["planned_amounts", "rollovers", "all"]
-
-class BudgetCopyOptions:
-    copy_planned_amounts: bool = True
-    copy_rollover_settings: bool = True
-    overwrite_existing: bool = False
+class BudgetFlexRow:
+    budget_variability: BudgetVariability | None
+    amounts: list[BudgetAmount]
 
 class BudgetSettings:
-    mode: BudgetMode
-    start_month: YearMonth | None
-    include_goals: bool | None
-    flex_settings: FlexBudgetSettings | None
+    budget_system: BudgetSystem | None
+    apply_to_future_months_default: bool | None
+    status: BudgetStatus | None
+    flex_rollover: BudgetRolloverPeriod | None
 
-class FlexBudgetSettings:
-    fixed_category_group_ids: list[CategoryGroupId]
-    non_monthly_category_group_ids: list[CategoryGroupId]
-    flexible_category_group_ids: list[CategoryGroupId]
+class FlexRolloverSettings:
+    budget_system: BudgetSystem | None
+    rollover_period: BudgetRolloverPeriod | None
 
-class BudgetSettingsPatch:
-    mode: BudgetMode | None
-    include_goals: bool | None
-    flex_settings: FlexBudgetSettings | None
+class Budget:
+    start_month: YearMonth
+    end_month: YearMonth
+    budget_system: BudgetSystem | None
+    status: BudgetStatus | None
+    totals_by_month: list[BudgetMonthTotals]
+    groups: list[BudgetGroupRow]
+    categories: list[BudgetCategoryRow]
+    flex: BudgetFlexRow | None
 ```
 
 ### Recurring Types
