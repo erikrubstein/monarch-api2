@@ -4,8 +4,8 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 .venv/
-demo/session.json
-demo/.env
+session.json
+.env
 recon/
 dist/
 build/
