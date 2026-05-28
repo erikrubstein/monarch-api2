@@ -109,6 +109,28 @@ Savings-goal transaction assignment uses Monarch's `Common_LinkTransactionToGoal
 - Explicit transaction-goal assignment belongs in Transactions because callers set it while creating or editing transactions. Goals owns savings-goal records, events, budget amounts, and account balance links.
 - Retail sync belongs in Receipts. Generic transaction attachment upload/download/delete belongs here because it is attached directly to a transaction and powers `Transaction.attachments`.
 
+### Receipts
+
+Receipts owns the manually uploaded/scanned receipt workflow. Monarch exposes this through retail-sync backend types, but the public API should stay receipt-oriented and default to `user_import` receipts rather than broad Amazon/Target retail syncs.
+
+#### Core Functions
+
+- `list_receipts(filters: ReceiptFilter | None = None, limit: int = 100, offset: int = 0) -> ReceiptPage`
+- `get_receipt(receipt_id: str) -> Receipt | None`
+- `upload_receipt(file_path: str | Path, *, filename: str | None = None, content_type: str | None = None) -> Receipt`
+- `delete_receipt(receipt_id: str) -> bool`
+- `match_receipt(receipt_id: str, transaction_id: TransactionId) -> Receipt`
+- `unmatch_receipt(receipt_id: str) -> Receipt`
+- `update_receipt(receipt_id: str, *, merchant_name: str | None = None, date: Date | None = None, total_before_tax: MoneyAmount | None = None, tax: MoneyAmount | None = None, tip: MoneyAmount | None = None, grand_total: MoneyAmount | None = None, line_items: list[ReceiptLineItemUpdate] | None = None, transaction_date: Date | None = None, transaction_total: MoneyAmount | None = None) -> Receipt`
+- `get_receipt_settings() -> ReceiptSettings`
+- `update_receipt_settings(*, auto_categorize: bool | None = None, update_transaction_notes: bool | None = None) -> ReceiptSettings`
+
+#### Build Notes
+
+Manual Monarch receipts appear as `vendor=user_import` retail syncs and have one order with one receipt-side retail transaction. If an anomalous receipt has more than one backend transaction, the API uses the first one internally and does not expose `receipt_transaction_id`.
+
+Receipt upload follows the web app's receipt-only `user_import` flow: create a retail sync, upload the file to `/retail-sync/{receipt_id}/files` as multipart form data, then start receipt processing. The public API still exposes this as `upload_receipt` rather than surfacing broad retail-sync concepts.
+
 ### Cashflow
 
 Cashflow owns opinionated cashflow-page data: income, expenses, savings, savings rate, trend points, and category/group/merchant breakdowns. It should answer the practical cashflow questions without requiring the caller to know Monarch's chart endpoints or reproduce the visual page layout.
@@ -744,6 +766,85 @@ class TransactionSplitDraft:
     tag_ids: list[TagId] | None
     goal_id: GoalId | None
 
+```
+
+### Receipts Types
+
+```python
+class ReceiptStatus(str, Enum):
+    COMPLETED = "completed"
+    FAILED = "failed"
+    IN_PROGRESS = "in_progress"
+    PENDING = "pending"
+    PENDING_MATCHES = "pending_matches"
+
+class Receipt:
+    id: str
+    status: ReceiptStatus | None
+    started_at: DateTime | None
+    ended_at: DateTime | None
+    created_at: DateTime | None
+    updated_at: DateTime | None
+    order: ReceiptOrder | None
+    transaction: ReceiptTransaction | None
+    attachment: ReceiptAttachment | None
+    is_matched: bool
+    transaction_id: TransactionId | None
+    raw: JsonDict | None
+
+class ReceiptOrder:
+    id: str
+    merchant_name: str | None
+    date: Date | None
+    total_before_tax: MoneyAmount | None
+    tax: MoneyAmount | None
+    tip: MoneyAmount | None
+    grand_total: MoneyAmount | None
+    line_items: list[ReceiptLineItem]
+    transaction: ReceiptTransaction | None
+    raw: JsonDict | None
+
+class ReceiptLineItem:
+    id: str
+    title: str
+    quantity: int | None
+    price: MoneyAmount | None
+    total: MoneyAmount | None
+    category: CategoryReference | None
+    raw: JsonDict | None
+
+class ReceiptTransaction:
+    id: str
+    date: Date | None
+    total: MoneyAmount | None
+    type: ReceiptTransactionType | None
+    linked_transaction: ReceiptLinkedTransaction | None
+    raw: JsonDict | None
+
+class ReceiptAttachment:
+    id: str
+    storage_id: str | None
+    filename: str | None
+    extension: str | None
+    size_bytes: int | None
+    original_asset_url: str | None
+    thumbnail_url: str | None
+    raw: JsonDict | None
+
+class ReceiptFilter:
+    status: ReceiptStatus | None
+
+class ReceiptLineItemUpdate:
+    line_item_id: str
+    title: str | None
+    category_id: CategoryId | None
+    price: MoneyAmount | None
+    quantity: int | None
+
+class ReceiptSettings:
+    auto_categorize: bool | None
+    update_transaction_notes: bool | None
+    raw: JsonDict | None
 ```
 
 ### Cashflow Types
