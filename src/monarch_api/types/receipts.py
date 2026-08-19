@@ -15,6 +15,11 @@ class ReceiptStatus(str, Enum):
     PENDING_MATCHES = "pending_matches"
 
 
+class ReceiptSource(str, Enum):
+    UPLOAD = "upload"
+    EMAIL = "email"
+
+
 class ReceiptTransactionType(str, Enum):
     PAYMENT = "payment"
     REFUND = "refund"
@@ -185,6 +190,7 @@ class ReceiptOrder:
 @dataclass(slots=True)
 class Receipt:
     id: str
+    source: ReceiptSource | None = None
     status: ReceiptStatus | None = None
     started_at: str | None = None
     ended_at: str | None = None
@@ -215,6 +221,7 @@ class Receipt:
         order = orders[0] if orders else None
         return cls(
             id=str(data["id"]),
+            source=_receipt_source(data.get("vendor")),
             status=_receipt_status(data.get("status")),
             started_at=data.get("startedAt"),
             ended_at=data.get("endedAt"),
@@ -251,12 +258,13 @@ class ReceiptPage:
 @dataclass(slots=True)
 class ReceiptFilter:
     status: ReceiptStatus | None = None
+    source: ReceiptSource | None = None
 
     def to_api(self) -> JsonDict:
         return _clean(
             {
                 "status": self.status.value if self.status is not None else None,
-                "vendor": "user_import",
+                "vendor": _receipt_source_vendor(self.source),
             }
         )
 
@@ -333,6 +341,22 @@ def _receipt_status(value: object) -> ReceiptStatus | None:
         return ReceiptStatus(str(value))
     except ValueError:
         return None
+
+
+def _receipt_source(value: object) -> ReceiptSource | None:
+    sources = {
+        "user_import": ReceiptSource.UPLOAD,
+        "email_import": ReceiptSource.EMAIL,
+    }
+    return sources.get(str(value))
+
+
+def _receipt_source_vendor(source: ReceiptSource | None) -> str | None:
+    if source == ReceiptSource.UPLOAD:
+        return "user_import"
+    if source == ReceiptSource.EMAIL:
+        return "email_import"
+    return None
 
 
 def _receipt_transaction_type(value: object) -> ReceiptTransactionType | None:

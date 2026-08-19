@@ -21,9 +21,10 @@ The API is built by product area, not by backend endpoint:
 - Public exports are available from `monarch_api`.
 
 Each group owns a clear workflow. Transactions own transaction edits and
-attachments. Receipts own scanned receipts. Goals own goal records and goal
-events. Budget owns monthly budget rows and rollover settings. Neighboring
-groups reference shared concepts by id rather than duplicating behavior.
+attachments. Receipts own uploaded and emailed receipts. Goals own goal records
+and goal events. Budget owns monthly budget rows and rollover settings.
+Neighboring groups reference shared concepts by id rather than duplicating
+behavior.
 
 Some Monarch features are intentionally omitted for now:
 
@@ -152,6 +153,10 @@ All authenticated functions take `session` as their first argument.
 - `update_receipt`
 - `get_receipt_settings`
 - `update_receipt_settings`
+
+`list_receipts` returns uploaded and emailed receipts together by default. Use
+`ReceiptFilter(source=ReceiptSource.UPLOAD)` or
+`ReceiptFilter(source=ReceiptSource.EMAIL)` to select one receipt source.
 
 ### Cashflow
 

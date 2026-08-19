@@ -22,6 +22,7 @@ from monarch_api.types.receipts import (
     ReceiptLineItemUpdate,
     ReceiptPage,
     ReceiptSettings,
+    ReceiptSource,
 )
 
 
@@ -272,15 +273,54 @@ def list_receipts(
     limit: int = 100,
     offset: int = 0,
 ) -> ReceiptPage:
-    receipt_filters = (
-        filters.to_api() if filters is not None else {"vendor": "user_import"}
+    if filters is not None and filters.source is not None:
+        return _fetch_receipt_page(
+            session,
+            filters=filters,
+            limit=limit,
+            offset=offset,
+        )
+
+    status = filters.status if filters is not None else None
+    needed = max(offset + limit, 0)
+    source_pages = [
+        _fetch_receipts_up_to(
+            session,
+            filters=ReceiptFilter(status=status, source=source),
+            count=needed,
+        )
+        for source in (ReceiptSource.UPLOAD, ReceiptSource.EMAIL)
+    ]
+    receipts = sorted(
+        (
+            receipt
+            for page in source_pages
+            for receipt in page.receipts
+        ),
+        key=lambda receipt: (receipt.created_at or "", receipt.id),
+        reverse=True,
     )
+    return ReceiptPage(
+        receipts=receipts[offset : offset + limit],
+        total_count=sum(page.total_count for page in source_pages),
+        limit=limit,
+        offset=offset,
+    )
+
+
+def _fetch_receipt_page(
+    session: AuthSession,
+    *,
+    filters: ReceiptFilter,
+    limit: int,
+    offset: int,
+) -> ReceiptPage:
     data = graphql_request(
         session,
         "Common_RetailSyncsQueryWithTotal",
         LIST_RECEIPTS_QUERY,
         {
-            "filters": receipt_filters,
+            "filters": filters.to_api(),
             "offset": offset,
             "limit": limit,
             "includeTotalCount": True,
@@ -299,6 +339,34 @@ def list_receipts(
         total_count=int(payload.get("totalCount") or 0),
         limit=limit,
         offset=offset,
+    )
+
+
+def _fetch_receipts_up_to(
+    session: AuthSession,
+    *,
+    filters: ReceiptFilter,
+    count: int,
+) -> ReceiptPage:
+    receipts: list[Receipt] = []
+    total_count = 0
+    request_count = max(count, 1)
+    while len(receipts) < request_count:
+        page = _fetch_receipt_page(
+            session,
+            filters=filters,
+            limit=min(100, request_count - len(receipts)),
+            offset=len(receipts),
+        )
+        total_count = page.total_count
+        receipts.extend(page.receipts)
+        if not page.receipts or len(receipts) >= total_count:
+            break
+    return ReceiptPage(
+        receipts=receipts[:count],
+        total_count=total_count,
+        limit=count,
+        offset=0,
     )
 
 
